@@ -1,0 +1,8 @@
+log_level: "debug"
+
+# Minimal configuration - all other settings use defaults.
+filters:
+  - namespace: "projectcontour"
+    pod: "*"
+    container: "*"
+    command: "*"

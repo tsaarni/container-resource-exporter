@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: container-resource-exporter
+  labels:
+    app: container-resource-exporter
+spec:
+  selector:
+    matchLabels:
+      app: container-resource-exporter
+  template:
+    metadata:
+      labels:
+        app: container-resource-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      hostPID: true
+      hostNetwork: true
+      containers:
+        - name: exporter
+          image: ghcr.io/tsaarni/container-resource-exporter:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /container-resource-exporter
+          args:
+            - -config=/config/config.yaml
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /config/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: containerd
+              mountPath: /run/containerd/containerd.sock
+          securityContext:
+            privileged: true
+      volumes:
+        - name: config
+          configMap:
+            name: container-resource-exporter-config
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: containerd
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: Socket
+      # Run on all nodes including master
+      #tolerations:
+      #  - effect: NoSchedule
+      #    operator: Exists
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: container-resource-exporter
+  labels:
+    app: container-resource-exporter
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for DaemonSet
+  ports:
+    - port: 8080
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app: container-resource-exporter
