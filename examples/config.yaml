@@ -1,0 +1,54 @@
+# Container Resource Exporter Configuration
+
+server:
+  # Address to listen on for HTTP requests
+  address: ":8080"
+
+paths:
+  # Path to cgroup v2 filesystem
+  cgroup: "/sys/fs/cgroup"
+
+  # Path where proc is mounted
+  proc: "/proc"
+
+  # Path to container runtime CRI socket
+  # If not specified, auto-detects from common locations:
+  #   - /run/containerd/containerd.sock (containerd)
+  #   - /run/crio/crio.sock (CRI-O)
+  #   - /run/cri-dockerd.sock (cri-dockerd)
+  # cri_socket: "/run/containerd/containerd.sock"
+
+# Interval between metric collection cycles
+scrape_interval: "1s"
+
+# Log level: debug, info, warn, error, none
+log_level: "info"
+
+# Container and process filters - containers matching ANY of these filters will be monitored
+# Each filter applies AND logic to its fields (namespace, pod, container, command)
+# Use "*" as wildcard to match any value
+# The 'command' field filters processes within the matched containers
+filters:
+  # Monitor all containers in the default namespace, and all processes within
+  - namespace: "default"
+    pod: "*"
+    container: "*"
+    command: "*"
+
+  # Monitor specific pods in kube-system
+  - namespace: "kube-system"
+    pod: "coredns-*"
+    container: "*"
+    command: "*"
+
+  # Example: Monitor only java processes in production namespace
+  # - namespace: "production"
+  #   pod: "*"
+  #   container: "app"
+  #   command: "java"
+
+  # Example: Monitor specific processes in specific containers
+  # - namespace: "backend"
+  #   pod: "api-*"
+  #   container: "main"
+  #   command: "node"

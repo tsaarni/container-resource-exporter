@@ -351,141 +351,141 @@ var (
 	ProcessSmapsSize = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_size_bytes",
-			Help: "Total size of the memory mapping in bytes.",
+			Help: "Total size of the memory mapping in bytes (from Size).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsRss = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_rss_bytes",
-			Help: "Resident Set Size: amount of the mapping currently resident in RAM (bytes).",
+			Help: "Resident Set Size: amount of the mapping currently resident in RAM (bytes) (from Rss).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsPss = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_pss_bytes",
-			Help: "Proportional Set Size: mapping's share of RAM, divided by number of processes sharing each page (bytes).",
+			Help: "Proportional Set Size: mapping's share of RAM, divided by number of processes sharing each page (bytes) (from Pss).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsPssDirty = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_pss_dirty_bytes",
-			Help: "Proportional Set Size of dirty pages in the mapping (bytes).",
+			Help: "Proportional Set Size of dirty pages in the mapping (bytes) (from Pss_Dirty).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsSharedClean = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_shared_clean_bytes",
-			Help: "Amount of clean shared pages in the mapping (bytes).",
+			Help: "Amount of clean shared pages in the mapping (bytes) (from Shared_Clean).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsSharedDirty = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_shared_dirty_bytes",
-			Help: "Amount of dirty shared pages in the mapping (bytes).",
+			Help: "Amount of dirty shared pages in the mapping (bytes) (from Shared_Dirty).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsPrivateClean = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_private_clean_bytes",
-			Help: "Amount of clean private pages in the mapping (bytes).",
+			Help: "Amount of clean private pages in the mapping (bytes) (from Private_Clean).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsPrivateDirty = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_private_dirty_bytes",
-			Help: "Amount of dirty private pages in the mapping (bytes).",
+			Help: "Amount of dirty private pages in the mapping (bytes) (from Private_Dirty).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsReferenced = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_referenced_bytes",
-			Help: "Amount of memory in the mapping currently marked as referenced or accessed (bytes).",
+			Help: "Amount of memory in the mapping currently marked as referenced or accessed (bytes) (from Referenced).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsAnonymous = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_anonymous_bytes",
-			Help: "Amount of memory in the mapping that does not belong to any file (bytes).",
+			Help: "Amount of memory in the mapping that does not belong to any file (bytes) (from Anonymous).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsLazyFree = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_lazyfree_bytes",
-			Help: "Amount of memory in the mapping marked by madvise(MADV_FREE), to be freed under memory pressure (bytes).",
+			Help: "Amount of memory in the mapping marked by madvise(MADV_FREE), to be freed under memory pressure (bytes) (from LazyFree).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsAnonHugePages = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_anon_hugepages_bytes",
-			Help: "Amount of memory in the mapping backed by transparent hugepages (bytes).",
+			Help: "Amount of memory in the mapping backed by transparent hugepages (bytes) (from AnonHugePages).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsShmemPmdMapped = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_shmem_pmdmapped_bytes",
-			Help: "Amount of shared (shmem/tmpfs) memory in the mapping backed by huge pages (bytes).",
+			Help: "Amount of shared (shmem/tmpfs) memory in the mapping backed by huge pages (bytes) (from ShmemPmdMapped).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsSharedHugetlb = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_shared_hugetlb_bytes",
-			Help: "Amount of memory in the mapping backed by hugetlbfs pages and shared (bytes).",
+			Help: "Amount of memory in the mapping backed by hugetlbfs pages and shared (bytes) (from Shared_Hugetlb).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsPrivateHugetlb = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_private_hugetlb_bytes",
-			Help: "Amount of memory in the mapping backed by hugetlbfs pages and private (bytes).",
+			Help: "Amount of memory in the mapping backed by hugetlbfs pages and private (bytes) (from Private_Hugetlb).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsSwap = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_swap_bytes",
-			Help: "Amount of would-be-anonymous memory in the mapping that is swapped out (bytes).",
+			Help: "Amount of would-be-anonymous memory in the mapping that is swapped out (bytes) (from Swap).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsSwapPss = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_swap_pss_bytes",
-			Help: "Proportional share of swap space used by the mapping (bytes).",
+			Help: "Proportional share of swap space used by the mapping (bytes) (from SwapPss).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsKernelPageSize = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_kernel_page_size_bytes",
-			Help: "Kernel page size used for the mapping (bytes).",
+			Help: "Kernel page size used for the mapping (bytes) (from KernelPageSize).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsMMUPageSize = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_mmu_page_size_bytes",
-			Help: "MMU page size used for the mapping (bytes).",
+			Help: "MMU page size used for the mapping (bytes) (from MMUPageSize).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 	ProcessSmapsLocked = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "process_smaps_locked_bytes",
-			Help: "Amount of memory in the mapping that is locked in RAM (bytes).",
+			Help: "Amount of memory in the mapping that is locked in RAM (bytes) (from Locked).",
 		},
-		[]string{"namespace", "pod", "container", "comm", "path"},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 )

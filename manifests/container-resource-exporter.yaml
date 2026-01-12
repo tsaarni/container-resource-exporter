@@ -17,8 +17,6 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
-      hostPID: true
-      hostNetwork: true
       containers:
         - name: exporter
           image: ghcr.io/tsaarni/container-resource-exporter:latest
@@ -31,39 +29,24 @@ spec:
             - name: metrics
               containerPort: 8080
               protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: metrics
-            initialDelaySeconds: 10
-            periodSeconds: 30
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: metrics
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
           volumeMounts:
             - name: config
               mountPath: /config/config.yaml
               subPath: config.yaml
               readOnly: true
+            # Host access required for reading container metrics
             - name: cgroup
               mountPath: /sys/fs/cgroup
               readOnly: true
             - name: proc
               mountPath: /proc
               readOnly: true
+            # Host socket access required for container runtime communication
             - name: containerd
               mountPath: /run/containerd/containerd.sock
           securityContext:
+            # Must run as root to access host volumes (cgroup, proc, containerd socket)
+            runAsUser: 0
             privileged: true
       volumes:
         - name: config

@@ -1,0 +1,11 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: echoserver
+spec:
+  virtualhost:
+    fqdn: echoserver.127.0.0.136.nip.io
+  routes:
+    - services:
+        - name: echoserver
+          port: 80

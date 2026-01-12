@@ -117,15 +117,15 @@ func (c *Collector) collectSmapsMetrics(container Container) {
 		}
 
 		for _, m := range mappings {
-			c.setSmapsMetrics(container, proc.Comm, m)
+			c.setSmapsMetrics(container, proc, m)
 		}
 
-		slog.Debug("Collected smaps metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "pid", proc.PID, "comm", proc.Comm, "mappings", len(mappings))
+		slog.Debug("Collected smaps metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "pid", proc.PID, "ns_pid", proc.NSPID, "comm", proc.Comm, "mappings", len(mappings))
 	}
 }
 
-func (c *Collector) setSmapsMetrics(container Container, comm string, m *SmapsMapping) {
-	labels := []string{container.Namespace, container.Pod, container.Container, comm, m.Path}
+func (c *Collector) setSmapsMetrics(container Container, proc ProcessInfo, m *SmapsMapping) {
+	labels := []string{container.Namespace, container.Pod, container.Container, strconv.Itoa(proc.PID), strconv.Itoa(proc.NSPID), proc.Comm, m.Path}
 
 	ProcessSmapsSize.WithLabelValues(labels...).Set(float64(m.SizeBytes))
 	ProcessSmapsRss.WithLabelValues(labels...).Set(float64(m.RssBytes))

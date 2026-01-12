@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,9 +23,9 @@ type ServerConfig struct {
 }
 
 type PathsConfig struct {
-	Cgroup           string `yaml:"cgroup"`
-	Proc             string `yaml:"proc"`
-	ContainerdSocket string `yaml:"containerd_socket"`
+	Cgroup    string `yaml:"cgroup"`
+	Proc      string `yaml:"proc"`
+	CRISocket string `yaml:"cri_socket"`
 }
 
 type ContainerFilter struct {
@@ -68,8 +69,9 @@ func (c *Config) applyDefaults() {
 		c.Paths.Proc = "/proc"
 	}
 
-	if c.Paths.ContainerdSocket == "" {
-		c.Paths.ContainerdSocket = "/run/containerd/containerd.sock"
+	if c.Paths.CRISocket == "" {
+		// Auto-detect CRI socket from common locations
+		c.Paths.CRISocket = detectCRISocket()
 	}
 
 	if c.ScrapeInterval == "" {
@@ -101,8 +103,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("paths.proc is required")
 	}
 
-	if c.Paths.ContainerdSocket == "" {
-		return fmt.Errorf("paths.containerd_socket is required")
+	if c.Paths.CRISocket == "" {
+		return fmt.Errorf("paths.cri_socket was not auto-detected and is required to be specified")
 	}
 
 	if _, err := time.ParseDuration(c.ScrapeInterval); err != nil {
@@ -120,7 +122,7 @@ func (c *Config) Validate() error {
 	}{
 		{"cgroup path", c.Paths.Cgroup},
 		{"proc path", c.Paths.Proc},
-		{"containerd socket", c.Paths.ContainerdSocket},
+		{"CRI socket", c.Paths.CRISocket},
 	} {
 		if path.path == "" {
 			continue
@@ -152,7 +154,6 @@ func (c *Config) MatchesContainer(namespace, pod, container string) bool {
 }
 
 // MatchesProcess checks if a process command matches the command filter for the given container.
-// It uses the command pattern from the first filter that matches the container.
 func (c *Config) MatchesProcess(namespace, pod, container, command string) bool {
 	for _, filter := range c.Filters {
 		if matchPattern(filter.Namespace, namespace) &&
@@ -171,7 +172,24 @@ func matchPattern(pattern, value string) bool {
 		return true
 	}
 
-	// Simple wildcard matching - could be enhanced with filepath.Match if needed.
 	matched, _ := filepath.Match(pattern, value)
 	return matched
+}
+
+// detectCRISocket attempts to find the CRI socket from common locations.
+func detectCRISocket() string {
+	// Try common CRI socket paths in order of prevalence
+	commonPaths := []string{
+		"/run/containerd/containerd.sock", // containerd
+		"/run/crio/crio.sock",             // CRI-O
+		"/run/cri-dockerd.sock",           // cri-dockerd
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	slog.Warn("Failed to auto-detect CRI socket from common locations")
+	return ""
 }
