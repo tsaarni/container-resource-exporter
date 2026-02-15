@@ -187,7 +187,22 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "2"
+              "options": "1xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "2xx"
             },
             "properties": [
               {
@@ -202,7 +217,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "3"
+              "options": "3xx"
             },
             "properties": [
               {
@@ -217,7 +232,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "4"
+              "options": "4xx"
             },
             "properties": [
               {
@@ -232,7 +247,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "5"
+              "options": "5xx"
             },
             "properties": [
               {
@@ -272,8 +287,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(envoy_http_downstream_rq_total[1m])) by (envoy_response_code_class)",
-          "legendFormat": "{{envoy_response_code_class}}",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx[1m])) by (envoy_response_code_class)",
+          "legendFormat": "{{envoy_response_code_class}}xx",
           "range": true,
           "refId": "A"
         }

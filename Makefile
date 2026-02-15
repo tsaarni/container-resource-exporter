@@ -24,23 +24,7 @@ kind-create: ## Create kind cluster.
 	kind create cluster --name $(KIND_CLUSTER_NAME) --config examples/contour/configs/kind.yaml
 
 kind-setup: ## Setup Contour and observability stack.
-	kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
-	kubectl rollout status deployment/contour -n projectcontour
-	kubectl scale deployment/contour -n projectcontour --replicas=1
-	kubectl create configmap container-resource-exporter-config \
-		--from-file=config.yaml=examples/contour/configs/exporter.yaml \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl create configmap prometheus-config \
-		--from-file=examples/contour/configs/prometheus.yml \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl create configmap grafana-dashboards \
-		--from-file=examples/contour/configs/grafana-envoy-details.json \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl apply -f manifests/container-resource-exporter.yaml
-	kubectl apply -f examples/contour/manifests/prometheus.yaml
-	kubectl apply -f examples/contour/manifests/grafana.yaml
-	kubectl apply -f examples/contour/manifests/exposure.yaml
-	kubectl apply -f https://raw.githubusercontent.com/tsaarni/echoserver/refs/heads/main/manifests/echoserver.yaml
+	./examples/contour/setup.sh
 
 kind-delete: ## Delete kind cluster.
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
