@@ -1,8 +1,8 @@
-# Container Resource Exporter
+![Container Resource Exporter logo light](./examples/cre-logo-light.png#gh-light-mode-only)
+![Container Resource Exporter logo dark](./examples/cre-logo-dark.png#gh-dark-mode-only)
+
 
 A Prometheus-compatible metrics exporter that monitors container resource usage of Kubernetes workloads.
-
-## Overview
 
 This exporter collects detailed resource usage statistics for containers by leveraging:
 - cgroup v2 for container resource metrics
@@ -14,7 +14,7 @@ This exporter was created because other existing solutions did not provide all n
 
 ## Demo
 
-For a complete example of a full observability stack with Prometheus and Grafana, see [`examples/contour`](examples/contour).
+For a complete example of using the exporter in with Prometheus and Grafana, see [`examples/contour`](examples/contour).
 
 ## Configuration
 
