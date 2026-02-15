@@ -12,6 +12,10 @@ See [documentation](METRICS.md) for a full list of supported metrics.
 This exporter was created because other existing solutions did not provide all needed cgroup v2 and smaps metrics.
 
 
+## Demo
+
+For a complete example of a full observability stack with Prometheus and Grafana, see [`examples/contour`](examples/contour).
+
 ## Configuration
 
 Provide configuration using a YAML file and specify it with the `-config` command line argument:
@@ -71,18 +75,9 @@ Note that `container-resource-exporter` needs to run as root and following host 
 To deploy with provided example manifest, run:
 
 ```bash
-kubectl create configmap container-resource-exporter-config --from-file=examples/config.yaml
-kubectl apply -f manifests/manifests/container-resource-exporter.yaml
+kubectl create configmap container-resource-exporter-config --from-file=examples/example-config.yaml
+kubectl apply -f manifests/container-resource-exporter.yaml
 ```
-
-To see that the metrics are being collected, port-forward the exporter service and access the metrics endpoint:
-
-```bash
-kubectl port-forward daemonset/container-resource-exporter 8080:8080
-curl http://localhost:8080/metrics
-```
-
-The other manifests in [`manifests/`](manifests/) provide a simple example for full observability stack with Prometheus and Grafana, see [CONTRIBUTING.md](CONTRIBUTING.md) for example on how to use them in a local Kind cluster.
 
 ## Contributing
 

@@ -8,43 +8,35 @@ This guide is for those who wish to contribute to the project.
 - Docker and kubectl available.
 - Kubernetes cluster with cluster-admin access, this example uses [Kind](https://kind.sigs.k8s.io/) for local testing.
 
-## Development Setup
+## Development
 
-### Build the Project
+Build the project
 
 ```bash
 make
 ```
 
-### Linting
 
-Run linters to ensure code quality:
+Run linters:
 
 ```bash
 make lint
 ```
 
-### Create a Test Kubernetes Cluster
+Create Kubernetes cluster:
 
 ```bash
 make kind-create
 ```
 
-To delete the cluster when done:
+Deploy full observability stack, see the [examples/contour/README.md](examples/contour/README.md) for further information.
 
-```bash
-make kind-delete
-```
-
-### Setup Observability Stack in Kind Cluster
 
 ```bash
 make kind-setup
 ```
 
-### Make Code Changes and Test
-
-Re-build the container image, load it into the Kind cluster, and restart the exporter pods:
+After making code changes:
 
 ```bash
 make container
@@ -63,11 +55,8 @@ kubectl delete pod -l app=prometheus
 kubectl delete pod -l app=grafana
 ```
 
-See the [examples/contour/README.md](examples/contour/README.md) for further information.
+Delete the cluster when done:
 
-## Pull Requests
-
-- Create a descriptive branch name for your changes.
-- Ensure `make lint` passes before submitting.
-- Add unit tests for new features or bug fixes whenever possible.
-- Provide a clear description of the changes in your pull request.
+```bash
+make kind-delete
+```
