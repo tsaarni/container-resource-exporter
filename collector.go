@@ -78,11 +78,12 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 			continue
 		}
 
-		if metric.gauge != nil {
-			metric.gauge.WithLabelValues(container.Namespace, container.Pod, container.Container).Set(float64(value))
-		} else if metric.counter != nil {
-			metric.counter.WithLabelValues(container.Namespace, container.Pod, container.Container).Add(float64(value))
+		finalValue := float64(value)
+		if metric.conversionFactor != 0 {
+			finalValue *= metric.conversionFactor
 		}
+
+		metric.gauge.WithLabelValues(container.Namespace, container.Pod, container.Container).Set(finalValue)
 	}
 
 	slog.Debug("Collected cgroup metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)

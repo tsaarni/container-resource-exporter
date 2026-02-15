@@ -35,8 +35,8 @@ Labels: `namespace`, `pod`, `container`
 | `cgroup_memory_stat_active_file_bytes` | Gauge | Amount of active file-backed memory on the internal memory management lists (from `memory.stat:active_file`). |
 | `cgroup_memory_stat_inactive_file_bytes` | Gauge | Amount of inactive file-backed memory on the internal memory management lists (from `memory.stat:inactive_file`). |
 | `cgroup_memory_stat_unevictable_bytes` | Gauge | Amount of unevictable memory (from `memory.stat:unevictable`). |
-| `cgroup_memory_stat_pgfault_total` | Counter | Total number of page faults incurred by the cgroup (from `memory.stat:pgfault`). |
-| `cgroup_memory_stat_pgmajfault_total` | Counter | Number of major page faults incurred by the cgroup (from `memory.stat:pgmajfault`). |
+| `cgroup_memory_stat_pgfault_total` | Gauge | Total number of page faults incurred by the cgroup (from `memory.stat:pgfault`). |
+| `cgroup_memory_stat_pgmajfault_total` | Gauge | Number of major page faults incurred by the cgroup (from `memory.stat:pgmajfault`). |
 
 ### CPU Metrics
 
@@ -44,12 +44,12 @@ Labels: `namespace`, `pod`, `container`
 
 | Metric Name | Type | Description |
 |---|---|---|
-| `cgroup_cpu_usage_usec` | Counter | Total CPU time consumed by all processes in the cgroup, in microseconds (from `cpu.stat:usage_usec`). |
-| `cgroup_cpu_user_usec` | Counter | Total user mode CPU time consumed by the cgroup, in microseconds (from `cpu.stat:user_usec`). |
-| `cgroup_cpu_system_usec` | Counter | Total system (kernel) mode CPU time consumed by the cgroup, in microseconds (from `cpu.stat:system_usec`). |
-| `cgroup_cpu_nr_periods_total` | Counter | Number of enforcement intervals (periods) for CPU bandwidth (from `cpu.stat:nr_periods`). |
-| `cgroup_cpu_nr_throttled_total` | Counter | Number of periods in which the cgroup was throttled due to CPU quota (from `cpu.stat:nr_throttled`). |
-| `cgroup_cpu_throttled_usec_total` | Counter | Total time duration in microseconds that the cgroup was throttled due to CPU quota (from `cpu.stat:throttled_usec`). |
+| `cgroup_cpu_usage_seconds_total` | Gauge | Total CPU time consumed by all processes in the cgroup, in seconds (from `cpu.stat:usage_usec`). |
+| `cgroup_cpu_user_seconds_total` | Gauge | Total user mode CPU time consumed by the cgroup, in seconds (from `cpu.stat:user_usec`). |
+| `cgroup_cpu_system_seconds_total` | Gauge | Total system (kernel) mode CPU time consumed by the cgroup, in seconds (from `cpu.stat:system_usec`). |
+| `cgroup_cpu_nr_periods_total` | Gauge | Number of enforcement intervals (periods) for CPU bandwidth (from `cpu.stat:nr_periods`). |
+| `cgroup_cpu_nr_throttled_total` | Gauge | Number of periods in which the cgroup was throttled due to CPU quota (from `cpu.stat:nr_throttled`). |
+| `cgroup_cpu_throttled_seconds_total` | Gauge | Total time duration in seconds that the cgroup was throttled due to CPU quota (from `cpu.stat:throttled_usec`). |
 
 ### PID Metrics
 

@@ -40,7 +40,7 @@ The `config.yaml` file supports the following options:
 
 <sup>1</sup> The `command` filter is based on the process name from `/proc/[pid]/comm`, which is limited to the first 15 characters of the executable name.
 
-For a complete example, see [`examples/config.yaml`](examples/config.yaml).
+For a complete example, see [`examples/example-config.yaml`](examples/example-config.yaml).
 
 ## Building
 

@@ -6,10 +6,10 @@ import (
 )
 
 type Metric struct {
-	gauge           *prometheus.GaugeVec
-	counter         *prometheus.CounterVec
-	cgroupFile      string
-	cgroupFileField string
+	gauge            *prometheus.GaugeVec
+	cgroupFile       string
+	cgroupFileField  string
+	conversionFactor float64
 }
 
 // Cgroup v2 metrics
@@ -223,8 +223,8 @@ var cgroupMetrics = []Metric{
 		cgroupFileField: "unevictable",
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
 				Name: "cgroup_memory_stat_pgfault_total",
 				Help: "Total number of page faults incurred by the cgroup (from memory.stat:pgfault).",
 			},
@@ -234,8 +234,8 @@ var cgroupMetrics = []Metric{
 		cgroupFileField: "pgfault",
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
 				Name: "cgroup_memory_stat_pgmajfault_total",
 				Help: "Number of major page faults incurred by the cgroup (from memory.stat:pgmajfault).",
 			},
@@ -246,41 +246,44 @@ var cgroupMetrics = []Metric{
 	},
 	// CPU
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "cgroup_cpu_usage_usec",
-				Help: "Total CPU time consumed by all processes in the cgroup, in microseconds (from cpu.stat:usage_usec).",
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "cgroup_cpu_usage_seconds_total",
+				Help: "Total CPU time consumed by all processes in the cgroup, in seconds (from cpu.stat:usage_usec).",
 			},
 			[]string{"namespace", "pod", "container"},
 		),
-		cgroupFile:      "cpu.stat",
-		cgroupFileField: "usage_usec",
+		cgroupFile:       "cpu.stat",
+		cgroupFileField:  "usage_usec",
+		conversionFactor: 0.000001,
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "cgroup_cpu_user_usec",
-				Help: "Total user mode CPU time consumed by the cgroup, in microseconds (from cpu.stat:user_usec).",
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "cgroup_cpu_user_seconds_total",
+				Help: "Total user mode CPU time consumed by the cgroup, in seconds (from cpu.stat:user_usec).",
 			},
 			[]string{"namespace", "pod", "container"},
 		),
-		cgroupFile:      "cpu.stat",
-		cgroupFileField: "user_usec",
+		cgroupFile:       "cpu.stat",
+		cgroupFileField:  "user_usec",
+		conversionFactor: 0.000001,
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "cgroup_cpu_system_usec",
-				Help: "Total system (kernel) mode CPU time consumed by the cgroup, in microseconds (from cpu.stat:system_usec).",
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "cgroup_cpu_system_seconds_total",
+				Help: "Total system (kernel) mode CPU time consumed by the cgroup, in seconds (from cpu.stat:system_usec).",
 			},
 			[]string{"namespace", "pod", "container"},
 		),
-		cgroupFile:      "cpu.stat",
-		cgroupFileField: "system_usec",
+		cgroupFile:       "cpu.stat",
+		cgroupFileField:  "system_usec",
+		conversionFactor: 0.000001,
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
 				Name: "cgroup_cpu_nr_periods_total",
 				Help: "Number of enforcement intervals (periods) for CPU bandwidth (from cpu.stat:nr_periods).",
 			},
@@ -290,8 +293,8 @@ var cgroupMetrics = []Metric{
 		cgroupFileField: "nr_periods",
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
 				Name: "cgroup_cpu_nr_throttled_total",
 				Help: "Number of periods in which the cgroup was throttled due to CPU quota (from cpu.stat:nr_throttled).",
 			},
@@ -301,15 +304,16 @@ var cgroupMetrics = []Metric{
 		cgroupFileField: "nr_throttled",
 	},
 	{
-		counter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "cgroup_cpu_throttled_usec_total",
-				Help: "Total time duration in microseconds that the cgroup was throttled due to CPU quota (from cpu.stat:throttled_usec).",
+		gauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "cgroup_cpu_throttled_seconds_total",
+				Help: "Total time duration in seconds that the cgroup was throttled due to CPU quota (from cpu.stat:throttled_usec).",
 			},
 			[]string{"namespace", "pod", "container"},
 		),
-		cgroupFile:      "cpu.stat",
-		cgroupFileField: "throttled_usec",
+		cgroupFile:       "cpu.stat",
+		cgroupFileField:  "throttled_usec",
+		conversionFactor: 0.000001,
 	},
 	// PIDs
 	{

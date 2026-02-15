@@ -1,0 +1,94 @@
+global:
+  scrape_interval:     1s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Job for container-resource-exporter itself.
+  # Renames the pod name to 'exporter_pod' to avoid confusion with the metrics it exports.
+  - job_name: 'container-resource-exporter'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: container-resource-exporter
+      - target_label: __metrics_path__
+        replacement: /metrics
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:8080
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: exporter_pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: exporter_namespace
+      # Identify the exporter's own container
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: exporter_container
+
+  # Job for Contour.
+  # Scrapes pods with 'app: contour' label in 'projectcontour' namespace on port 8000.
+  - job_name: 'contour'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - projectcontour
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: contour
+      # Ensure we only scrape the main contour container if there are sidecars
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: keep
+        regex: contour
+      - target_label: __metrics_path__
+        replacement: /metrics
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:8000
+        target_label: __address__
+      # Use the same label names as container-resource-exporter for easy joins in Grafana
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: app
+
+  # Job for Envoy.
+  # Scrapes pods with 'app: envoy' label in 'projectcontour' namespace on port 8002.
+  - job_name: 'envoy'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - projectcontour
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: envoy
+      # Ensure we only scrape the main envoy container if there are sidecars
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: keep
+        regex: envoy
+      - target_label: __metrics_path__
+        replacement: /stats/prometheus
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:8002
+        target_label: __address__
+      # Use the same label names as container-resource-exporter for easy joins in Grafana
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: app

@@ -12,21 +12,12 @@ kubeadmConfigPatches:
         "service-node-port-range": "80-32767"
 nodes:
 - role: control-plane
-- role: worker
   extraPortMappings:
   - containerPort: 80
     hostPort: 80
-    listenAddress: "127.0.0.136"
   - containerPort: 443
     hostPort: 443
-    listenAddress: "127.0.0.136"
   - containerPort: 3000
     hostPort: 3000
-    listenAddress: "127.0.0.136"
   - containerPort: 8080
     hostPort: 8080
-    listenAddress: "127.0.0.136"
-  extraMounts:
-   - hostPath: ./
-     containerPath: /host
-     readOnly: true
