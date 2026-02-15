@@ -163,10 +163,6 @@
             "showPoints": "auto",
             "showValues": false,
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
             "thresholdsStyle": {
               "mode": "off"
             }
