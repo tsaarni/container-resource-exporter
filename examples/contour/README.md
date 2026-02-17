@@ -2,6 +2,8 @@
 
 This example demonstrates how to monitor Contour and Envoy using `container-resource-exporter`.
 
+![Grafana Screenshot](grafana-screenshot.png)
+
 ## Prerequisites
 
 - [Kind](https://kind.sigs.k8s.io/) installed.
