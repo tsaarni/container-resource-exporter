@@ -14,10 +14,12 @@ nodes:
 - role: control-plane
   extraPortMappings:
   - containerPort: 80
-    hostPort: 80
+    hostPort: 80 # Envoy
   - containerPort: 443
-    hostPort: 443
+    hostPort: 443 # Envoy
   - containerPort: 3000
-    hostPort: 3000
+    hostPort: 3000 # Grafana
   - containerPort: 8080
-    hostPort: 8080
+    hostPort: 8080 # Container Resource Exporter
+  - containerPort: 9090
+    hostPort: 9090 # Prometheus
