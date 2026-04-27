@@ -111,7 +111,9 @@ func (c *Collector) collectSmapsMetrics(container Container) {
 		}
 
 		mappings, err := ParseSmaps(f)
-		f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Warn("Failed to close smaps", "pid", proc.PID, "error", closeErr)
+		}
 		if err != nil {
 			slog.Warn("Failed to parse smaps", "pid", proc.PID, "error", err)
 			continue
