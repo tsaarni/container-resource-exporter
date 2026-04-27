@@ -14,7 +14,7 @@ clean: ## Clean up build artifacts.
 lint: lint-go ## Run all linters.
 
 lint-go: ## Run golangci-lint.
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4 run
 
 kind-load: ## Load container image into kind cluster and restart daemonset.
 	kind load docker-image ghcr.io/tsaarni/container-resource-exporter:latest --name $(KIND_CLUSTER_NAME)
