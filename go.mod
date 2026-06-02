@@ -6,7 +6,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	google.golang.org/grpc v1.80.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/cri-api v0.36.0
+	k8s.io/cri-api v0.36.1
 )
 
 require (
