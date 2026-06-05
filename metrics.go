@@ -348,6 +348,36 @@ var cgroupMetrics = []Metric{
 	},
 }
 
+// Multi-value cgroup metrics (files with space-separated values like cpu.max)
+
+type MultiValueMetric struct {
+	gauges           []*prometheus.GaugeVec
+	cgroupFile       string
+	conversionFactor float64
+}
+
+var cgroupMultiValueMetrics = []MultiValueMetric{
+	{
+		cgroupFile: "cpu.max",
+		gauges: []*prometheus.GaugeVec{
+			promauto.NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "cgroup_cpu_max_quota_microseconds",
+					Help: "CPU time in microseconds that the cgroup can consume per period; -1 means no limit (from cpu.max).",
+				},
+				[]string{"namespace", "pod", "container"},
+			),
+			promauto.NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "cgroup_cpu_max_period_microseconds",
+					Help: "Length of the CPU bandwidth period in microseconds (from cpu.max).",
+				},
+				[]string{"namespace", "pod", "container"},
+			),
+		},
+	},
+}
+
 // Smaps metrics - enhanced with container labels
 // https://docs.kernel.org/filesystems/proc.html
 
