@@ -52,3 +52,37 @@ filters:
   #   pod: "api-*"
   #   container: "main"
   #   command: "node"
+
+  # Example: Monitor file sizes for specific containers
+  # Supports glob patterns including ** for recursive matching.
+  # When a pattern matches multiple files, the reported value is
+  # the sum of all matching files.
+  # - namespace: "default"
+  #   pod: "database-*"
+  #   container: "db"
+  #   command: "*"
+  #   file_metrics:
+  #     paths:
+  #       - "/data/main.db"
+  #       - "/data/wal/*"
+  #       - "/data/**/*.log"
+
+# Disk metrics configuration
+# Controls which mountpoints are reported for container_mountpoint_* metrics
+disk_metrics:
+  # Filesystem types to exclude (default list covers virtual/pseudo filesystems)
+  # fstype_exclude:
+  #   - "autofs"
+  #   - "binfmt_misc"
+  #   - "proc"
+  #   - "sysfs"
+  #   - ...
+
+  # Mountpoint path patterns to exclude (supports ** glob)
+  # Default excludes container runtime masking mounts:
+  # mountpoint_exclude:
+  #   - "/dev"
+  #   - "/dev/**"
+  #   - "/proc/**"
+  #   - "/sys/**"
+  #   - "/run/secrets/**"

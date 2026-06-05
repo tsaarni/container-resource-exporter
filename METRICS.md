@@ -50,6 +50,10 @@ Labels: `namespace`, `pod`, `container`
 | `cgroup_cpu_nr_periods_total` | Gauge | Number of enforcement intervals (periods) for CPU bandwidth (from `cpu.stat:nr_periods`). |
 | `cgroup_cpu_nr_throttled_total` | Gauge | Number of periods in which the cgroup was throttled due to CPU quota (from `cpu.stat:nr_throttled`). |
 | `cgroup_cpu_throttled_seconds_total` | Gauge | Total time duration in seconds that the cgroup was throttled due to CPU quota (from `cpu.stat:throttled_usec`). |
+| `cgroup_cpu_max_quota_microseconds` | Gauge | CPU time in microseconds that the cgroup can consume per period; -1 means no limit (from `cpu.max`). |
+| `cgroup_cpu_max_period_microseconds` | Gauge | Length of the CPU bandwidth period in microseconds (from `cpu.max`). |
+
+> **Note:** Quota ÷ period = CPU limit in cores. For example, quota 200000 with period 100000 means a 2-core limit. These values reflect the Kubernetes `resources.limits.cpu` setting.
 
 ### PID Metrics
 
@@ -99,6 +103,37 @@ Labels: `namespace`, `pod`, `container`, `host_pid`, `ns_pid`, `comm`, `path`
 | `process_smaps_kernel_page_size_bytes` | Gauge | Kernel page size used for the mapping in bytes (from `KernelPageSize`). |
 | `process_smaps_mmu_page_size_bytes` | Gauge | MMU page size used for the mapping in bytes (from `MMUPageSize`). |
 | `process_smaps_locked_bytes` | Gauge | Amount of memory in the mapping that is locked in RAM in bytes (from `Locked`). |
+
+## Disk (Filesystem) Metrics
+
+These metrics provide filesystem space usage for each mountpoint visible to the container.
+The data is obtained by parsing `/proc/<pid>/mountinfo` and calling `statfs` on each mount.
+
+Pseudo-filesystems (proc, sysfs, cgroup, etc.) are excluded by default via the `disk_metrics.fstype_exclude` configuration option.
+
+Labels: `namespace`, `pod`, `container`, `mountpoint`, `fstype`, `device`
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `container_mountpoint_capacity_bytes` | Gauge | Total capacity of the filesystem at the mountpoint in bytes (`f_blocks * f_bsize`). |
+| `container_mountpoint_available_bytes` | Gauge | Available space on the filesystem at the mountpoint in bytes (`f_bavail * f_bsize`). |
+| `container_mountpoint_used_bytes` | Gauge | Used space on the filesystem at the mountpoint in bytes (`capacity - available`). |
+
+## File Size Metrics
+
+These metrics track file sizes within containers.
+Configured via the optional `file_metrics.paths` field on each filter entry.
+Supports glob patterns. The data is obtained by calling `stat` on each matching file via `/proc/<pid>/root/`.
+
+When a glob pattern matches multiple files, the metric value is the **sum** of all matching files.
+The `path` label contains the configured pattern (not the resolved file paths).
+
+Labels: `namespace`, `pod`, `container`, `path`
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `container_file_size_bytes` | Gauge | Total apparent size of files matching the pattern in bytes (`st_size` from stat). |
+| `container_file_disk_usage_bytes` | Gauge | Total actual disk space used by files matching the pattern in bytes (`st_blocks * 512` from stat). |
 
 ## References
 

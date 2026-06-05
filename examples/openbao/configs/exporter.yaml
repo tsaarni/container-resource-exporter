@@ -1,0 +1,14 @@
+log_level: "debug"
+
+filters:
+  - namespace: "default"
+    pod: "openbao-*"
+    container: "*"
+    command: "*"
+    disk_metrics:
+      mountpoints:
+        - "/openbao/data"
+    file_metrics:
+      paths:
+        - "/openbao/data/raft/raft.db"
+        - "/openbao/data/vault.db"

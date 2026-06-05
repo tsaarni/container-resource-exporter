@@ -27,3 +27,6 @@ vendor/
 # OS
 .DS_Store
 Thumbs.db
+
+examples/openbao/certs/
+examples/openbao/init.json

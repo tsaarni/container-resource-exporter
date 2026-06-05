@@ -1,0 +1,13 @@
+subject: cn=ca
+---
+subject: cn=bao-server
+issuer: cn=ca
+sans:
+  - DNS:localhost
+  - IP:127.0.0.1
+  - DNS:openbao-0.openbao-internal
+  - DNS:openbao-1.openbao-internal
+  - DNS:openbao-2.openbao-internal
+---
+subject: cn=client
+issuer: cn=ca

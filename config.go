@@ -18,6 +18,14 @@ type Config struct {
 	Filters        []ContainerFilter `yaml:"filters"`
 }
 
+type DiskMetricsConfig struct {
+	Mountpoints []string `yaml:"mountpoints"`
+}
+
+type FileMetricsConfig struct {
+	Paths []string `yaml:"paths"`
+}
+
 type ServerConfig struct {
 	Address string `yaml:"address"`
 }
@@ -29,10 +37,12 @@ type PathsConfig struct {
 }
 
 type ContainerFilter struct {
-	Namespace string `yaml:"namespace"`
-	Pod       string `yaml:"pod"`
-	Container string `yaml:"container"`
-	Command   string `yaml:"command"`
+	Namespace   string            `yaml:"namespace"`
+	Pod         string            `yaml:"pod"`
+	Container   string            `yaml:"container"`
+	Command     string            `yaml:"command"`
+	DiskMetrics DiskMetricsConfig `yaml:"disk_metrics"`
+	FileMetrics FileMetricsConfig `yaml:"file_metrics"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -151,6 +161,32 @@ func (c *Config) MatchesContainer(namespace, pod, container string) bool {
 		}
 	}
 	return false
+}
+
+// FileMetricPaths returns the combined file metric paths from all filters matching a container.
+func (c *Config) FileMetricPaths(namespace, pod, container string) []string {
+	var paths []string
+	for _, filter := range c.Filters {
+		if matchPattern(filter.Namespace, namespace) &&
+			matchPattern(filter.Pod, pod) &&
+			matchPattern(filter.Container, container) {
+			paths = append(paths, filter.FileMetrics.Paths...)
+		}
+	}
+	return paths
+}
+
+// MountpointPaths returns the combined mountpoint paths from all filters matching a container.
+func (c *Config) MountpointPaths(namespace, pod, container string) []string {
+	var paths []string
+	for _, filter := range c.Filters {
+		if matchPattern(filter.Namespace, namespace) &&
+			matchPattern(filter.Pod, pod) &&
+			matchPattern(filter.Container, container) {
+			paths = append(paths, filter.DiskMetrics.Mountpoints...)
+		}
+	}
+	return paths
 }
 
 // MatchesProcess checks if a process command matches the command filter for the given container.
