@@ -1,88 +1,56 @@
-# Container Resource Exporter Configuration
+# Container resource exporter configuration
 
 server:
-  # Address to listen on for HTTP requests
+  # Listen address and port
   address: ":8080"
 
 paths:
-  # Path to cgroup v2 filesystem
+  # Path to cgroup v2 directory
   cgroup: "/sys/fs/cgroup"
 
-  # Path where proc is mounted
+  # Path to proc directory
   proc: "/proc"
 
-  # Path to container runtime CRI socket
-  # If not specified, auto-detects from common locations:
-  #   - /run/containerd/containerd.sock (containerd)
-  #   - /run/crio/crio.sock (CRI-O)
-  #   - /run/cri-dockerd.sock (cri-dockerd)
+  # Path to container runtime CRI socket. If commented out, the exporter will search common paths.
   # cri_socket: "/run/containerd/containerd.sock"
 
-# Interval between metric collection cycles
+# How often to collect metrics
 scrape_interval: "1s"
 
-# Log level: debug, info, warn, error, none
+# Logging level: debug, info, warn, error, none
 log_level: "info"
 
-# Container and process filters - containers matching ANY of these filters will be monitored
-# Each filter applies AND logic to its fields (namespace, pod, container, command)
-# Use "*" as wildcard to match any value
-# The 'command' field filters processes within the matched containers
+# List of containers to collect metrics from. If any filter matches, the container is monitored.
 filters:
-  # Monitor all containers in the default namespace, and all processes within
+  # Match all containers in the default namespace
   - namespace: "default"
     pod: "*"
     container: "*"
     command: "*"
 
-  # Monitor specific pods in kube-system
+  # Match coredns pods in the kube-system namespace
   - namespace: "kube-system"
     pod: "coredns-*"
     container: "*"
     command: "*"
 
-  # Example: Monitor only java processes in production namespace
-  # - namespace: "production"
-  #   pod: "*"
-  #   container: "app"
-  #   command: "java"
+  # Collect sizes of matching files inside the container
+  - namespace: "my-namespace"
+    pod: "my-pod-*"
+    container: "my-container"
+    command: "*"
+    file_metrics:
+      paths:
+        - "/var/log/app.log"
+        - "/data/*.db"
+        - "/data/**/*.tmp"
 
-  # Example: Monitor specific processes in specific containers
-  # - namespace: "backend"
-  #   pod: "api-*"
-  #   container: "main"
-  #   command: "node"
-
-  # Example: Monitor file sizes for specific containers
-  # Supports glob patterns including ** for recursive matching.
-  # When a pattern matches multiple files, the reported value is
-  # the sum of all matching files.
-  # - namespace: "default"
-  #   pod: "database-*"
-  #   container: "db"
-  #   command: "*"
-  #   file_metrics:
-  #     paths:
-  #       - "/data/main.db"
-  #       - "/data/wal/*"
-  #       - "/data/**/*.log"
-
-# Disk metrics configuration
-# Controls which mountpoints are reported for container_mountpoint_* metrics
-disk_metrics:
-  # Filesystem types to exclude (default list covers virtual/pseudo filesystems)
-  # fstype_exclude:
-  #   - "autofs"
-  #   - "binfmt_misc"
-  #   - "proc"
-  #   - "sysfs"
-  #   - ...
-
-  # Mountpoint path patterns to exclude (supports ** glob)
-  # Default excludes container runtime masking mounts:
-  # mountpoint_exclude:
-  #   - "/dev"
-  #   - "/dev/**"
-  #   - "/proc/**"
-  #   - "/sys/**"
-  #   - "/run/secrets/**"
+  # Collect disk space of specific mountpoints inside the container
+  - namespace: "my-namespace"
+    pod: "my-pod-*"
+    container: "my-container"
+    command: "*"
+    disk_metrics:
+      mountpoints:
+        - "/data"
+        - "/cache"

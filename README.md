@@ -41,6 +41,8 @@ The `config.yaml` file supports the following options:
 | `filters[].pod` | Pod name pattern (supports `*` wildcard) | — |
 | `filters[].container` | Container name pattern (supports `*` wildcard) | — |
 | `filters[].command` | Process command pattern (supports `*` wildcard) <sup>1</sup> | `*` (matches all commands) |
+| `filters[].disk_metrics.mountpoints` | Optional list of disk mountpoints inside the container to monitor | — |
+| `filters[].file_metrics.paths` | Optional list of file paths inside the container to monitor (supports wildcards like `*` and `**`) | — |
 
 <sup>1</sup> The `command` filter is based on the process name from `/proc/[pid]/comm`, which is limited to the first 15 characters of the executable name.
 

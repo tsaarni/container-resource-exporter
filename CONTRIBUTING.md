@@ -60,3 +60,4 @@ Delete the cluster when done:
 ```bash
 make kind-delete
 ```
+

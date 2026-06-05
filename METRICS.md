@@ -4,7 +4,7 @@ This document describes all metrics exported by `container-resource-exporter`.
 
 ## Cgroup v2 Metrics
 
-These metrics are based on Linux cgroup v2 and are available for each Kubernetes namespace, pod, and container.
+These metrics are based on Linux cgroup v2 and are available for each Kubernetes namespace, pod, and container. The exporter reads these files from the path configured in `paths.cgroup` (defaults to `/sys/fs/cgroup`).
 
 The `(from ...)` in descriptions tells the source for the metric within the Linux cgroup v2 filesystem:
 - Single file: `(from memory.current)` - metric is read directly from the cgroup v2 `memory.current` file.
@@ -68,7 +68,7 @@ Labels: `namespace`, `pod`, `container`
 ## Smaps Metrics
 
 These metrics provide detailed per-process memory mapping information for all containers being monitored.
-Smaps metrics are read from the Linux `/proc/<pid>/smaps` file.
+Smaps metrics are read from the Linux `/proc/<pid>/smaps` file, using the path configured in `paths.proc` (defaults to `/proc`).
 
 The `(from ...)` in descriptions tells the source of the metric within the `smaps` file.
 
@@ -107,9 +107,10 @@ Labels: `namespace`, `pod`, `container`, `host_pid`, `ns_pid`, `comm`, `path`
 ## Disk (Filesystem) Metrics
 
 These metrics provide filesystem space usage for each mountpoint visible to the container.
-The data is obtained by parsing `/proc/<pid>/mountinfo` and calling `statfs` on each mount.
+The data is obtained by parsing `/proc/<pid>/mountinfo` (using the path configured in `paths.proc`, which defaults to `/proc`) and calling `statfs` on each mount.
 
-Pseudo-filesystems (proc, sysfs, cgroup, etc.) are excluded by default via the `disk_metrics.fstype_exclude` configuration option.
+Configured via the optional `filters[].disk_metrics.mountpoints` field on each filter entry.
+
 
 Labels: `namespace`, `pod`, `container`, `mountpoint`, `fstype`, `device`
 
@@ -122,10 +123,10 @@ Labels: `namespace`, `pod`, `container`, `mountpoint`, `fstype`, `device`
 ## File Size Metrics
 
 These metrics track file sizes within containers.
-Configured via the optional `file_metrics.paths` field on each filter entry.
-Supports glob patterns. The data is obtained by calling `stat` on each matching file via `/proc/<pid>/root/`.
+Configured via the optional `filters[].file_metrics.paths` field on each filter entry.
+Supports wildcards. The data is obtained by calling `stat` on each matching file via `/proc/<pid>/root/` (using the path configured in `paths.proc`, which defaults to `/proc`).
 
-When a glob pattern matches multiple files, the metric value is the **sum** of all matching files.
+When a wildcard matches multiple files, the metric value is the **sum** of all matching files.
 The `path` label contains the configured pattern (not the resolved file paths).
 
 Labels: `namespace`, `pod`, `container`, `path`
