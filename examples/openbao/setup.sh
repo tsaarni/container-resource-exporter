@@ -108,5 +108,5 @@ Use following settings:
 
 To generate load:
 
-  go run traffic.go
+  go run -C traffic . --help
 EOF

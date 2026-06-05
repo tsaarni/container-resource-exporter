@@ -8,7 +8,7 @@ This exporter collects metrics by leveraging:
 - cgroup v2 for CPU, memory, and PID limits and usage
 - `/proc/[pid]/smaps` for per-process memory mapping statistics
 - `/proc/[pid]/mountinfo` and `statfs` for filesystem disk usage
-- File path patterns and `stat` for file sizes and disk usage
+- `/proc/[pid]/root` and `stat` for file sizes and disk usage
 
 See [documentation](METRICS.md) for a full list of supported metrics.
 This exporter was created because other existing solutions did not provide all of these metrics.
@@ -16,7 +16,9 @@ This exporter was created because other existing solutions did not provide all o
 
 ## Demo
 
-For a complete example of using the exporter in with Prometheus and Grafana, see [`examples/contour`](examples/contour).
+For complete examples of using the exporter with Prometheus and Grafana, see:
+- [`examples/contour`](examples/contour) for monitoring Envoy proxy resource usage.
+- [`examples/openbao`](examples/openbao) for monitoring OpenBao, including its database and storage size.
 
 ## Configuration
 
