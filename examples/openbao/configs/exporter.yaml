@@ -5,10 +5,9 @@ filters:
     pod: "openbao-*"
     container: "*"
     command: "*"
-    disk_metrics:
+    collect:
       mountpoints:
         - "/openbao/data"
-    file_metrics:
-      paths:
+      files:
         - "/openbao/data/raft/raft.db"
         - "/openbao/data/vault.db"

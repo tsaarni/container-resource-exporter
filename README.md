@@ -4,12 +4,14 @@
 
 A Prometheus-compatible metrics exporter that monitors container resource usage of Kubernetes workloads.
 
-This exporter collects detailed resource usage statistics for containers by leveraging:
-- cgroup v2 for container resource metrics
-- `/proc/[pid]/smaps` for memory mapping statistics
+This exporter collects metrics by leveraging:
+- cgroup v2 for CPU, memory, and PID limits and usage
+- `/proc/[pid]/smaps` for per-process memory mapping statistics
+- `/proc/[pid]/mountinfo` and `statfs` for filesystem disk usage
+- File path patterns and `stat` for file sizes and disk usage
 
 See [documentation](METRICS.md) for a full list of supported metrics.
-This exporter was created because other existing solutions did not provide all needed cgroup v2 and smaps metrics.
+This exporter was created because other existing solutions did not provide all of these metrics.
 
 
 ## Demo
@@ -41,8 +43,8 @@ The `config.yaml` file supports the following options:
 | `filters[].pod` | Pod name pattern (supports `*` wildcard) | — |
 | `filters[].container` | Container name pattern (supports `*` wildcard) | — |
 | `filters[].command` | Process command pattern (supports `*` wildcard) <sup>1</sup> | `*` (matches all commands) |
-| `filters[].disk_metrics.mountpoints` | Optional list of disk mountpoints inside the container to monitor | — |
-| `filters[].file_metrics.paths` | Optional list of file paths inside the container to monitor (supports wildcards like `*` and `**`) | — |
+| `filters[].collect.mountpoints` | Optional list of disk mountpoints inside the container to monitor | — |
+| `filters[].collect.files` | Optional list of file paths inside the container to monitor (supports wildcards like `*` and `**`) | — |
 
 <sup>1</sup> The `command` filter is based on the process name from `/proc/[pid]/comm`, which is limited to the first 15 characters of the executable name.
 

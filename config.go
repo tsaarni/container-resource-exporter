@@ -18,14 +18,6 @@ type Config struct {
 	Filters        []ContainerFilter `yaml:"filters"`
 }
 
-type DiskMetricsConfig struct {
-	Mountpoints []string `yaml:"mountpoints"`
-}
-
-type FileMetricsConfig struct {
-	Paths []string `yaml:"paths"`
-}
-
 type ServerConfig struct {
 	Address string `yaml:"address"`
 }
@@ -36,23 +28,30 @@ type PathsConfig struct {
 	CRISocket string `yaml:"cri_socket"`
 }
 
+type CollectConfig struct {
+	Mountpoints []string `yaml:"mountpoints"`
+	Files       []string `yaml:"files"`
+}
+
 type ContainerFilter struct {
-	Namespace   string            `yaml:"namespace"`
-	Pod         string            `yaml:"pod"`
-	Container   string            `yaml:"container"`
-	Command     string            `yaml:"command"`
-	DiskMetrics DiskMetricsConfig `yaml:"disk_metrics"`
-	FileMetrics FileMetricsConfig `yaml:"file_metrics"`
+	Namespace string        `yaml:"namespace"`
+	Pod       string        `yaml:"pod"`
+	Container string        `yaml:"container"`
+	Command   string        `yaml:"command"`
+	Collect   CollectConfig `yaml:"collect"`
 }
 
 func LoadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}
+	defer func() { _ = file.Close() }()
 
 	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	dec := yaml.NewDecoder(file)
+	dec.KnownFields(true)
+	if err := dec.Decode(&config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
@@ -170,7 +169,7 @@ func (c *Config) FileMetricPaths(namespace, pod, container string) []string {
 		if matchPattern(filter.Namespace, namespace) &&
 			matchPattern(filter.Pod, pod) &&
 			matchPattern(filter.Container, container) {
-			paths = append(paths, filter.FileMetrics.Paths...)
+			paths = append(paths, filter.Collect.Files...)
 		}
 	}
 	return paths
@@ -183,7 +182,7 @@ func (c *Config) MountpointPaths(namespace, pod, container string) []string {
 		if matchPattern(filter.Namespace, namespace) &&
 			matchPattern(filter.Pod, pod) &&
 			matchPattern(filter.Container, container) {
-			paths = append(paths, filter.DiskMetrics.Mountpoints...)
+			paths = append(paths, filter.Collect.Mountpoints...)
 		}
 	}
 	return paths

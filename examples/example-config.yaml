@@ -39,8 +39,8 @@ filters:
     pod: "my-pod-*"
     container: "my-container"
     command: "*"
-    file_metrics:
-      paths:
+    collect:
+      files:
         - "/var/log/app.log"
         - "/data/*.db"
         - "/data/**/*.tmp"
@@ -50,7 +50,7 @@ filters:
     pod: "my-pod-*"
     container: "my-container"
     command: "*"
-    disk_metrics:
+    collect:
       mountpoints:
         - "/data"
         - "/cache"

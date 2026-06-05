@@ -109,7 +109,7 @@ Labels: `namespace`, `pod`, `container`, `host_pid`, `ns_pid`, `comm`, `path`
 These metrics provide filesystem space usage for each mountpoint visible to the container.
 The data is obtained by parsing `/proc/<pid>/mountinfo` (using the path configured in `paths.proc`, which defaults to `/proc`) and calling `statfs` on each mount.
 
-Configured via the optional `filters[].disk_metrics.mountpoints` field on each filter entry.
+Configured via the optional `filters[].collect.mountpoints` field on each filter entry.
 
 
 Labels: `namespace`, `pod`, `container`, `mountpoint`, `fstype`, `device`
@@ -123,7 +123,7 @@ Labels: `namespace`, `pod`, `container`, `mountpoint`, `fstype`, `device`
 ## File Size Metrics
 
 These metrics track file sizes within containers.
-Configured via the optional `filters[].file_metrics.paths` field on each filter entry.
+Configured via the optional `filters[].collect.files` field on each filter entry.
 Supports wildcards. The data is obtained by calling `stat` on each matching file via `/proc/<pid>/root/` (using the path configured in `paths.proc`, which defaults to `/proc`).
 
 When a wildcard matches multiple files, the metric value is the **sum** of all matching files.
