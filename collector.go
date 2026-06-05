@@ -98,6 +98,27 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 		metric.gauge.WithLabelValues(container.Namespace, container.Pod, container.Container).Set(finalValue)
 	}
 
+	for _, metric := range cgroupMultiValueMetrics {
+		values, err := cgroup.ReadSpaceSeparatedIntegers(metric.cgroupFile)
+		if err != nil {
+			slog.Debug("Failed to read cgroup multi-value metric", "file", metric.cgroupFile, "error", err)
+			continue
+		}
+		if len(values) != len(metric.gauges) {
+			slog.Debug("Unexpected number of values in cgroup file", "file", metric.cgroupFile, "expected", len(metric.gauges), "got", len(values))
+		}
+		for i, gauge := range metric.gauges {
+			if i >= len(values) {
+				break
+			}
+			finalValue := float64(values[i])
+			if metric.conversionFactor != 0 {
+				finalValue *= metric.conversionFactor
+			}
+			gauge.WithLabelValues(container.Namespace, container.Pod, container.Container).Set(finalValue)
+		}
+	}
+
 	slog.Debug("Collected cgroup metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)
 }
 

@@ -50,6 +50,10 @@ Labels: `namespace`, `pod`, `container`
 | `cgroup_cpu_nr_periods_total` | Gauge | Number of enforcement intervals (periods) for CPU bandwidth (from `cpu.stat:nr_periods`). |
 | `cgroup_cpu_nr_throttled_total` | Gauge | Number of periods in which the cgroup was throttled due to CPU quota (from `cpu.stat:nr_throttled`). |
 | `cgroup_cpu_throttled_seconds_total` | Gauge | Total time duration in seconds that the cgroup was throttled due to CPU quota (from `cpu.stat:throttled_usec`). |
+| `cgroup_cpu_max_quota_microseconds` | Gauge | CPU time in microseconds that the cgroup can consume per period; -1 means no limit (from `cpu.max`). |
+| `cgroup_cpu_max_period_microseconds` | Gauge | Length of the CPU bandwidth period in microseconds (from `cpu.max`). |
+
+> **Note:** Quota ÷ period = CPU limit in cores. For example, quota 200000 with period 100000 means a 2-core limit. These values reflect the Kubernetes `resources.limits.cpu` setting.
 
 ### PID Metrics
 

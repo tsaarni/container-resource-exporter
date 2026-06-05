@@ -82,6 +82,30 @@ func (c *CGroup) ReadInteger(fileName string) (int, error) {
 	return value, nil
 }
 
+// ReadSpaceSeparatedIntegers reads a cgroup file containing space-separated integers (e.g., cpu.max: "quota period").
+// Values of "max" are returned as -1.
+func (c *CGroup) ReadSpaceSeparatedIntegers(fileName string) ([]int, error) {
+	slog.Debug("Reading cgroup file", "path", filepath.Join(c.path, fileName))
+	rawData, err := os.ReadFile(filepath.Join(c.path, fileName))
+	if err != nil {
+		return nil, fmt.Errorf("error reading cgroup file: %w", err)
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(rawData)))
+	values := make([]int, len(fields))
+	for i, field := range fields {
+		if field == "max" {
+			values[i] = -1
+		} else {
+			values[i], err = strconv.Atoi(field)
+			if err != nil {
+				return nil, fmt.Errorf("error converting field %d to int: %w", i, err)
+			}
+		}
+	}
+	return values, nil
+}
+
 // ReadIntegerField reads a specific field from a cgroup file that contains key-value pairs.
 func (c *CGroup) ReadIntegerField(fileName, field string) (int, error) {
 	slog.Debug("Reading cgroup file field", "path", filepath.Join(c.path, fileName), "field", field)
