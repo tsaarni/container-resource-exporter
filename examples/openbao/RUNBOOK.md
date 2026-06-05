@@ -116,17 +116,33 @@ go run -C examples/openbao/traffic . stats
 
 ## Traffic Generator
 
+All subcommands support `--rps` (default 200), `--concurrency` (default 10), and `--count` (default 1000, 0=infinite).
+
 ```bash
-# Write 1000 secrets (~10 MB)
+# Write 1000 secrets of 10 KB each (~10 MB stored data).
+# Adjust --count and --size to control how much data is written.
 go run -C examples/openbao/traffic . kv-write
 
-# Delete secrets written by kv-write
+# Read random secrets from a pool of 500 keys at 200 RPS.
+# Adjust --pool to control how many distinct keys are read.
+go run -C examples/openbao/traffic . kv-read
+
+# Delete secrets written by kv-write (keys named key-1..key-N).
 go run -C examples/openbao/traffic . bulk-delete
 
-# Transit encryption benchmark
+# Encrypt+decrypt 10 KB payloads via transit engine (no disk I/O).
+# Adjust --size for different payload sizes.
 go run -C examples/openbao/traffic . transit
 
-# Show all options
+# Login using TLS client certificate (batch tokens, no storage).
+go run -C examples/openbao/traffic . cert-login
+
+# Mixed workload on KV v2: read/write/delete/transit/login.
+# Default mix: read=70,write=10,delete=10,transit=5,login=5.
+# Adjust --mix, --duration (e.g. 5m), --size, --pool.
+go run -C examples/openbao/traffic . mix
+
+# Show all subcommands and global flags
 go run -C examples/openbao/traffic . --help
 ```
 
