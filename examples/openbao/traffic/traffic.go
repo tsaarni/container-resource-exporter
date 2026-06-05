@@ -71,7 +71,7 @@ type StatsCmd struct{}
 
 var cli struct {
 	Addr   string `help:"OpenBao address." env:"BAO_ADDR" default:"https://localhost:8200" hidden:""`
-	CACert string `help:"Path to CA certificate." env:"BAO_CACERT" default:"certs/ca.pem"`
+	CACert string `help:"Path to CA certificate." env:"BAO_CACERT" default:"../certs/ca.pem"`
 
 	KVWrite    KVWriteCmd    `cmd:"kv-write" help:"Write secrets to KV v1 at secret/ (builds stored data)."`
 	KVRead     KVReadCmd     `cmd:"kv-read" help:"Read random secrets from KV v1."`

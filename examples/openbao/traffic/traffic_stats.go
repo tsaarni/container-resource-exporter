@@ -27,12 +27,7 @@ func runStats() {
 	exporter := "http://localhost:8080/metrics"
 	cacert := os.Getenv("BAO_CACERT")
 	if cacert == "" {
-		exe, _ := os.Executable()
-		cacert = filepath.Join(filepath.Dir(exe), "certs/ca.pem")
-		if _, err := os.Stat(cacert); err != nil {
-			// fall back to relative path from cwd
-			cacert = "certs/ca.pem"
-		}
+		cacert = "../certs/ca.pem"
 	}
 
 	raw, err := httpGet(exporter, "", nil)

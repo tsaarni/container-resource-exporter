@@ -2,6 +2,8 @@
 
 This example demonstrates how to monitor [OpenBao](https://openbao.org/) using `container-resource-exporter`.
 
+![Grafana Screenshot](grafana-screenshot.png)
+
 ## Prerequisites
 
 - [Kind](https://kind.sigs.k8s.io/)
@@ -32,7 +34,7 @@ The following services are exposed on the host after setup:
 To generate load on OpenBao, run the traffic generator:
 
 ```bash
-export BAO_TOKEN=$(jq -r '.root_token' init.json)
+BAO_TOKEN=$(jq -r '.root_token' init.json)
 go run -C traffic . kv-write
 ```
 
