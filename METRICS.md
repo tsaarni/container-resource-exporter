@@ -100,6 +100,37 @@ Labels: `namespace`, `pod`, `container`, `host_pid`, `ns_pid`, `comm`, `path`
 | `process_smaps_mmu_page_size_bytes` | Gauge | MMU page size used for the mapping in bytes (from `MMUPageSize`). |
 | `process_smaps_locked_bytes` | Gauge | Amount of memory in the mapping that is locked in RAM in bytes (from `Locked`). |
 
+## Disk (Filesystem) Metrics
+
+These metrics provide filesystem space usage for each mountpoint visible to the container.
+The data is obtained by parsing `/proc/<pid>/mountinfo` and calling `statfs` on each mount.
+
+Pseudo-filesystems (proc, sysfs, cgroup, etc.) are excluded by default via the `disk_metrics.fstype_exclude` configuration option.
+
+Labels: `namespace`, `pod`, `container`, `mountpoint`, `fstype`, `device`
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `container_mountpoint_capacity_bytes` | Gauge | Total capacity of the filesystem at the mountpoint in bytes (`f_blocks * f_bsize`). |
+| `container_mountpoint_available_bytes` | Gauge | Available space on the filesystem at the mountpoint in bytes (`f_bavail * f_bsize`). |
+| `container_mountpoint_used_bytes` | Gauge | Used space on the filesystem at the mountpoint in bytes (`capacity - available`). |
+
+## File Size Metrics
+
+These metrics track file sizes within containers.
+Configured via the optional `file_metrics.paths` field on each filter entry.
+Supports glob patterns. The data is obtained by calling `stat` on each matching file via `/proc/<pid>/root/`.
+
+When a glob pattern matches multiple files, the metric value is the **sum** of all matching files.
+The `path` label contains the configured pattern (not the resolved file paths).
+
+Labels: `namespace`, `pod`, `container`, `path`
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `container_file_size_bytes` | Gauge | Total apparent size of files matching the pattern in bytes (`st_size` from stat). |
+| `container_file_disk_usage_bytes` | Gauge | Total actual disk space used by files matching the pattern in bytes (`st_blocks * 512` from stat). |
+
 ## References
 
 - [Linux cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html)

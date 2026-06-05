@@ -6,7 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 type Collector struct {
@@ -53,12 +56,21 @@ func (c *Collector) collect(ctx context.Context) {
 		return
 	}
 
+	// Reset all metrics to remove stale series from disappeared containers/processes.
+	resetAllMetrics()
+
 	for _, container := range containers {
 		// Collect cgroup metrics
 		c.collectCgroupMetrics(container)
 
 		// Collect smaps metrics
 		c.collectSmapsMetrics(container)
+
+		// Collect disk metrics
+		c.collectDiskMetrics(container)
+
+		// Collect file metrics
+		c.collectFileMetrics(container)
 	}
 
 	slog.Debug("Metric collection cycle complete", "containers", len(containers))
@@ -150,4 +162,104 @@ func (c *Collector) setSmapsMetrics(container Container, proc ProcessInfo, m *Sm
 	ProcessSmapsKernelPageSize.WithLabelValues(labels...).Set(float64(m.KernelPageSizeBytes))
 	ProcessSmapsMMUPageSize.WithLabelValues(labels...).Set(float64(m.MMUPageSizeBytes))
 	ProcessSmapsLocked.WithLabelValues(labels...).Set(float64(m.LockedBytes))
+}
+
+func (c *Collector) collectDiskMetrics(container Container) {
+	if len(container.MountpointPaths) == 0 || len(container.PIDs) == 0 {
+		return
+	}
+
+	// Use first PID — all processes in a container share the same mount namespace.
+	pid := container.PIDs[0].PID
+	mountinfoPath := filepath.Join(c.config.Paths.Proc, strconv.Itoa(pid), "mountinfo")
+	f, err := os.Open(mountinfoPath)
+	if err != nil {
+		slog.Debug("Failed to open mountinfo", "pid", pid, "error", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	mounts, err := ParseMountInfo(f)
+	if err != nil {
+		slog.Warn("Failed to parse mountinfo", "pid", pid, "error", err)
+		return
+	}
+
+	// Index mounts by mountpoint for quick lookup.
+	mountMap := make(map[string]MountInfo, len(mounts))
+	for _, mount := range mounts {
+		mountMap[mount.MountPoint] = mount
+	}
+
+	for _, mountpoint := range container.MountpointPaths {
+		mount, ok := mountMap[mountpoint]
+		if !ok {
+			slog.Debug("Mountpoint not found in mountinfo", "mountpoint", mountpoint)
+			continue
+		}
+
+		// statfs via /proc/<pid>/root/<mountpoint> to access the container's mount namespace.
+		statPath := filepath.Join(c.config.Paths.Proc, strconv.Itoa(pid), "root", mount.MountPoint)
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(statPath, &stat); err != nil {
+			slog.Debug("Failed to statfs", "path", statPath, "error", err)
+			continue
+		}
+
+		bsize := uint64(stat.Bsize)
+		capacity := float64(stat.Blocks * bsize)
+		available := float64(stat.Bavail * bsize)
+		used := capacity - available
+
+		labels := []string{container.Namespace, container.Pod, container.Container, mount.MountPoint, mount.FsType, mount.Source}
+		MountpointCapacityBytes.WithLabelValues(labels...).Set(capacity)
+		MountpointAvailableBytes.WithLabelValues(labels...).Set(available)
+		MountpointUsedBytes.WithLabelValues(labels...).Set(used)
+	}
+
+	slog.Debug("Collected disk metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)
+}
+
+func (c *Collector) collectFileMetrics(container Container) {
+	if len(container.FileMetricPaths) == 0 || len(container.PIDs) == 0 {
+		return
+	}
+
+	pid := container.PIDs[0].PID
+	rootPath := filepath.Join(c.config.Paths.Proc, strconv.Itoa(pid), "root")
+
+	for _, pattern := range container.FileMetricPaths {
+		matches, err := doublestar.Glob(os.DirFS(rootPath), pattern[1:]) // Strip leading "/" for fs.FS
+		if err != nil {
+			slog.Debug("Invalid file glob pattern", "pattern", pattern, "error", err)
+			continue
+		}
+
+		var totalSize, totalDiskUsage int64
+		for _, match := range matches {
+			fullPath := filepath.Join(rootPath, match)
+			info, err := os.Lstat(fullPath)
+			if err != nil {
+				slog.Debug("Failed to stat file", "path", fullPath, "error", err)
+				continue
+			}
+			if info.IsDir() {
+				continue
+			}
+
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if !ok {
+				continue
+			}
+
+			totalSize += info.Size()
+			totalDiskUsage += stat.Blocks * 512
+		}
+
+		labels := []string{container.Namespace, container.Pod, container.Container, pattern}
+		FileSizeBytes.WithLabelValues(labels...).Set(float64(totalSize))
+		FileDiskUsageBytes.WithLabelValues(labels...).Set(float64(totalDiskUsage))
+	}
+
+	slog.Debug("Collected file metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)
 }

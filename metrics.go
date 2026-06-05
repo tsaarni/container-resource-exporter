@@ -493,3 +493,88 @@ var (
 		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
 	)
 )
+
+// Disk (filesystem) metrics per container mountpoint
+
+var (
+	MountpointCapacityBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "container_mountpoint_capacity_bytes",
+			Help: "Total capacity of the filesystem at the mountpoint in bytes (f_blocks * f_bsize).",
+		},
+		[]string{"namespace", "pod", "container", "mountpoint", "fstype", "device"},
+	)
+	MountpointAvailableBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "container_mountpoint_available_bytes",
+			Help: "Available space on the filesystem at the mountpoint in bytes (f_bavail * f_bsize).",
+		},
+		[]string{"namespace", "pod", "container", "mountpoint", "fstype", "device"},
+	)
+	MountpointUsedBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "container_mountpoint_used_bytes",
+			Help: "Used space on the filesystem at the mountpoint in bytes (capacity - available).",
+		},
+		[]string{"namespace", "pod", "container", "mountpoint", "fstype", "device"},
+	)
+)
+
+// File size metrics for individually monitored files
+
+var (
+	FileSizeBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "container_file_size_bytes",
+			Help: "Total apparent size of files matching the configured pattern in bytes (sum of st_size from stat).",
+		},
+		[]string{"namespace", "pod", "container", "path"},
+	)
+	FileDiskUsageBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "container_file_disk_usage_bytes",
+			Help: "Total actual disk space used by files matching the configured pattern in bytes (sum of st_blocks * 512 from stat).",
+		},
+		[]string{"namespace", "pod", "container", "path"},
+	)
+)
+
+// resetAllMetrics resets all metric vectors to remove stale series
+// from containers or processes that no longer exist.
+func resetAllMetrics() {
+	// Cgroup metrics
+	for _, m := range cgroupMetrics {
+		m.gauge.Reset()
+	}
+
+	// Smaps metrics
+	ProcessSmapsSize.Reset()
+	ProcessSmapsRss.Reset()
+	ProcessSmapsPss.Reset()
+	ProcessSmapsPssDirty.Reset()
+	ProcessSmapsSharedClean.Reset()
+	ProcessSmapsSharedDirty.Reset()
+	ProcessSmapsPrivateClean.Reset()
+	ProcessSmapsPrivateDirty.Reset()
+	ProcessSmapsReferenced.Reset()
+	ProcessSmapsAnonymous.Reset()
+	ProcessSmapsLazyFree.Reset()
+	ProcessSmapsAnonHugePages.Reset()
+	ProcessSmapsShmemPmdMapped.Reset()
+	ProcessSmapsSharedHugetlb.Reset()
+	ProcessSmapsPrivateHugetlb.Reset()
+	ProcessSmapsSwap.Reset()
+	ProcessSmapsSwapPss.Reset()
+	ProcessSmapsKernelPageSize.Reset()
+	ProcessSmapsMMUPageSize.Reset()
+	ProcessSmapsLocked.Reset()
+
+	// Disk metrics
+	MountpointCapacityBytes.Reset()
+	MountpointAvailableBytes.Reset()
+	MountpointUsedBytes.Reset()
+
+	// File metrics
+	FileSizeBytes.Reset()
+	FileDiskUsageBytes.Reset()
+}

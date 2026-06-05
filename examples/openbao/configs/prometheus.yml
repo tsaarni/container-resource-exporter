@@ -1,0 +1,25 @@
+global:
+  scrape_interval:     1s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'container-resource-exporter'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: container-resource-exporter
+      - target_label: __metrics_path__
+        replacement: /metrics
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:8080
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: exporter_pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: exporter_namespace
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: exporter_container

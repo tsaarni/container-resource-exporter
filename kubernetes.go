@@ -20,11 +20,13 @@ type KubernetesClient struct {
 }
 
 type Container struct {
-	ID        string
-	Namespace string
-	Pod       string
-	Container string
-	PIDs      []ProcessInfo
+	ID              string
+	Namespace       string
+	Pod             string
+	Container       string
+	PIDs            []ProcessInfo
+	MountpointPaths []string
+	FileMetricPaths []string
 }
 
 type ProcessInfo struct {
@@ -94,10 +96,12 @@ func (k *KubernetesClient) DiscoverContainers(ctx context.Context) ([]Container,
 			}
 
 			containers = append(containers, Container{
-				ID:        c.Id,
-				Namespace: namespace,
-				Pod:       podName,
-				Container: containerName,
+				ID:              c.Id,
+				Namespace:       namespace,
+				Pod:             podName,
+				Container:       containerName,
+				MountpointPaths: k.config.MountpointPaths(namespace, podName, containerName),
+				FileMetricPaths: k.config.FileMetricPaths(namespace, podName, containerName),
 			})
 		}
 	}

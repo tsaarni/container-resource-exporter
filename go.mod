@@ -3,6 +3,7 @@ module github.com/tsaarni/container-resource-exporter
 go 1.26.0
 
 require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/prometheus/client_golang v1.23.2
 	google.golang.org/grpc v1.80.0
 	gopkg.in/yaml.v3 v3.0.1

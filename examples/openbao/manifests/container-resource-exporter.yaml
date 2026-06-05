@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: container-resource-exporter
+  labels:
+    app: container-resource-exporter
+spec:
+  selector:
+    matchLabels:
+      app: container-resource-exporter
+  template:
+    metadata:
+      labels:
+        app: container-resource-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: ghcr.io/tsaarni/container-resource-exporter:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /container-resource-exporter
+          args:
+            - -config=/config/config.yaml
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: host
+              mountPath: /config/config.yaml
+              subPath: configs/exporter.yaml
+              readOnly: true
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: containerd
+              mountPath: /run/containerd/containerd.sock
+          securityContext:
+            runAsUser: 0
+            privileged: true
+      volumes:
+        - name: host
+          hostPath:
+            path: /host
+            type: Directory
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: containerd
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: container-resource-exporter
+  labels:
+    app: container-resource-exporter
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 8080
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app: container-resource-exporter
