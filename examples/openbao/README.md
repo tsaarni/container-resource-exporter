@@ -8,7 +8,9 @@ This example demonstrates how to monitor [OpenBao](https://openbao.org/) using `
 
 - [Kind](https://kind.sigs.k8s.io/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [certyaml](https://github.com/tsaarni/certyaml)
+- [Go](https://go.dev/)
+
+The environment will use `go run` to execute [`certyaml`](https://github.com/tsaarni/certyaml), [`raft-inspector`](https://github.com/tsaarni/raft-inspector/) and the traffic generator in the [`traffic`](traffic) directory.
 
 ## Deployment
 
@@ -31,7 +33,7 @@ The following services are exposed on the host after setup:
 
 ## Generating Load
 
-To generate load on OpenBao, run the traffic generator:
+To generate load on OpenBao, run the traffic generator, for example:
 
 ```bash
 BAO_TOKEN=$(jq -r '.root_token' init.json)
@@ -39,6 +41,8 @@ go run -C traffic . kv-write
 ```
 
 Then open Grafana at http://localhost:3000/ -> Dashboards -> **OpenBao Resource Monitoring** and pick a pod from the dropdown.
+
+Use [`RUNBOOK.md`](RUNBOOK.md) for inspiration, or as instructions for LLM agents, on how to explore the collected metrics and data.
 
 ## Cleanup
 

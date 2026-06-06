@@ -50,13 +50,15 @@ type TransitCmd struct {
 }
 
 type CertLoginCmd struct {
-	Count int `help:"Number of requests, 0=infinite." default:"1000"`
+	TokenType string `help:"Token type: batch or service." default:"batch" enum:"batch,service"`
+	Count     int    `help:"Number of requests, 0=infinite." default:"1000"`
 	workerFlags
 }
 
 type MixCmd struct {
 	Token       string        `help:"OpenBao token." env:"BAO_TOKEN" required:""`
 	Mix         string        `help:"Traffic mix as relative weights (e.g. read=7,write=1,delete=1,transit=1)." default:"read=70,write=10,delete=10,transit=5,login=5"`
+	TokenType   string        `help:"Token type for cert login: batch or service." default:"batch" enum:"batch,service"`
 	Size        int           `help:"Payload size in bytes." default:"10240"`
 	Pool        int           `help:"Secret pool size." default:"500"`
 	Duration    time.Duration `help:"Run duration (e.g. 5m, 0=infinite)." default:"0"`
@@ -146,9 +148,9 @@ func main() {
 	case "transit":
 		runTransit(addr, cli.Transit.Token, cli.Transit.Count, cli.Transit.RPS, cli.Transit.Concurrency, cli.Transit.Size)
 	case "cert-login":
-		runCertLogin(addr, tlsCfg, cli.CertLogin.Count, cli.CertLogin.RPS, cli.CertLogin.Concurrency)
+		runCertLogin(addr, tlsCfg, cli.CertLogin.TokenType, cli.CertLogin.Count, cli.CertLogin.RPS, cli.CertLogin.Concurrency)
 	case "mix":
-		runMix(addr, tlsCfg, cli.Mix.Token, cli.Mix.Mix, cli.Mix.RPS, cli.Mix.Concurrency, cli.Mix.Size, cli.Mix.Pool, cli.Mix.Duration)
+		runMix(addr, tlsCfg, cli.Mix.Token, cli.Mix.Mix, cli.Mix.TokenType, cli.Mix.RPS, cli.Mix.Concurrency, cli.Mix.Size, cli.Mix.Pool, cli.Mix.Duration)
 	case "bulk-delete":
 		runBulkDelete(addr, cli.BulkDelete.Token, cli.BulkDelete.Count, cli.BulkDelete.RPS, cli.BulkDelete.Concurrency)
 	}

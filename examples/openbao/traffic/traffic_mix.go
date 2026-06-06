@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -11,6 +12,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,12 +24,8 @@ import (
 	"github.com/tsaarni/echoclient/worker"
 )
 
-type trafficMix struct {
-	read, write, delete, transit, login, total int
-}
-
-func parseMix(s string) trafficMix {
-	m := trafficMix{}
+func parseMixWeights(s string) map[string]int {
+	m := make(map[string]int)
 	for _, part := range strings.Split(s, ",") {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
@@ -37,30 +35,14 @@ func parseMix(s string) trafficMix {
 		if _, err := fmt.Sscanf(kv[1], "%d", &v); err != nil {
 			log.Fatalf("invalid mix value: %q", part)
 		}
-		switch kv[0] {
-		case "read":
-			m.read = v
-		case "write":
-			m.write = v
-		case "delete":
-			m.delete = v
-		case "transit":
-			m.transit = v
-		case "login":
-			m.login = v
-		default:
-			log.Fatalf("unknown mix key: %q", kv[0])
-		}
-	}
-	m.total = m.read + m.write + m.delete + m.transit + m.login
-	if m.total == 0 {
-		log.Fatal("mix weights must not all be zero")
+		m[kv[0]] = v
 	}
 	return m
 }
 
-func runMix(addr string, tlsCfg *tls.Config, token, mixStr string, rps, concurrency, size, pool int, duration time.Duration) {
-	weights := parseMix(mixStr)
+func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rps, concurrency, size, pool int, duration time.Duration) {
+	weights := parseMixWeights(mixStr)
+
 	// Uses KV v2 at kv/. Maintains a pool of keys with churn (create new + delete random).
 	existing := listKeys(addr, token, "kv/metadata")
 
@@ -79,8 +61,8 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr string, rps, concurre
 	slog.Info("Starting mix", "duration", duration, "pool", humanize.Comma(int64(pool)), "mix", mixStr)
 
 	// Prepare cert login client
-	certFile := certPath("client.pem")
-	keyFile := certPath("client-key.pem")
+	certFile := filepath.Join("..", "certs", "client.pem")
+	keyFile := filepath.Join("..", "certs", "client-key.pem")
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		log.Fatalf("Load client cert: %v", err)
@@ -103,75 +85,86 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr string, rps, concurre
 	var nextID atomic.Int64
 	nextID.Store(int64(len(existing)))
 
-	mixFunc := func(ctx context.Context, _ *worker.WorkerPool) error {
-		r := rand.IntN(weights.total)
-		switch {
-		case r < weights.read: // read random key
-			mu.Lock()
-			if len(keys) == 0 {
-				mu.Unlock()
-				return nil
-			}
-			key := keys[rand.IntN(len(keys))]
+	var readFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
+		mu.Lock()
+		if len(keys) == 0 {
 			mu.Unlock()
-			return get(ctx, fmt.Sprintf("%s/v1/kv/data/%s", addr, key), token)
-
-		case r < weights.read+weights.write: // write new key
-			id := nextID.Add(1)
-			key := fmt.Sprintf("key-%d", id)
-			if err := post(ctx, fmt.Sprintf("%s/v1/kv/data/%s", addr, key), token, writePayload); err != nil {
-				return err
-			}
-			mu.Lock()
-			keys = append(keys, key)
-			mu.Unlock()
-			return nil
-
-		case r < weights.read+weights.write+weights.delete: // delete random key (swap-remove)
-			mu.Lock()
-			if len(keys) == 0 {
-				mu.Unlock()
-				return nil
-			}
-			idx := rand.IntN(len(keys))
-			key := keys[idx]
-			keys[idx] = keys[len(keys)-1]
-			keys = keys[:len(keys)-1]
-			mu.Unlock()
-			resp, err := doReqCtx(ctx, "DELETE", fmt.Sprintf("%s/v1/kv/metadata/%s", addr, key), token, nil)
-			if err != nil {
-				return err
-			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			return nil
-
-		case r < weights.read+weights.write+weights.delete+weights.transit: // transit encrypt/decrypt
-			resp, err := doReqCtx(ctx, "POST", addr+"/v1/transit/encrypt/default", token, encPayload)
-			if err != nil {
-				return err
-			}
-			var encResp struct {
-				Data struct{ Ciphertext string `json:"ciphertext"` } `json:"data"`
-			}
-			json.NewDecoder(resp.Body).Decode(&encResp)
-			resp.Body.Close()
-			decPayload := []byte(fmt.Sprintf(`{"ciphertext":"%s"}`, encResp.Data.Ciphertext))
-			return post(ctx, addr+"/v1/transit/decrypt/default", token, decPayload)
-
-		default: // cert login
-			req, _ := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", nil)
-			resp, err := loginClient.Do(req)
-			if err != nil {
-				return err
-			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
 			return nil
 		}
+		key := keys[rand.IntN(len(keys))]
+		mu.Unlock()
+		return get(ctx, fmt.Sprintf("%s/v1/kv/data/%s", addr, key), token)
 	}
 
-	// Use duration if set, otherwise run infinitely
+	var writeFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
+		id := nextID.Add(1)
+		key := fmt.Sprintf("key-%d", id)
+		if err := post(ctx, fmt.Sprintf("%s/v1/kv/data/%s", addr, key), token, writePayload); err != nil {
+			return err
+		}
+		mu.Lock()
+		keys = append(keys, key)
+		mu.Unlock()
+		return nil
+	}
+
+	var deleteFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
+		mu.Lock()
+		if len(keys) == 0 {
+			mu.Unlock()
+			return nil
+		}
+		idx := rand.IntN(len(keys))
+		key := keys[idx]
+		keys[idx] = keys[len(keys)-1]
+		keys = keys[:len(keys)-1]
+		mu.Unlock()
+		resp, err := doReqCtx(ctx, "DELETE", fmt.Sprintf("%s/v1/kv/metadata/%s", addr, key), token, nil)
+		if err != nil {
+			return err
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return nil
+	}
+
+	var transitFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
+		resp, err := doReqCtx(ctx, "POST", addr+"/v1/transit/encrypt/default", token, encPayload)
+		if err != nil {
+			return err
+		}
+		var encResp struct {
+			Data struct {
+				Ciphertext string `json:"ciphertext"`
+			} `json:"data"`
+		}
+		json.NewDecoder(resp.Body).Decode(&encResp)
+		resp.Body.Close()
+		decPayload := []byte(fmt.Sprintf(`{"ciphertext":"%s"}`, encResp.Data.Ciphertext))
+		return post(ctx, addr+"/v1/transit/decrypt/default", token, decPayload)
+	}
+
+	loginBody := []byte(fmt.Sprintf(`{"name":"%s"}`, tokenType))
+
+	var loginFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
+		req, _ := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", bytes.NewReader(loginBody))
+		resp, err := loginClient.Do(req)
+		if err != nil {
+			return err
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return nil
+	}
+
+	composedWorker := worker.Mix(
+		readFunc.Weighted(weights["read"]),
+		writeFunc.Weighted(weights["write"]),
+		deleteFunc.Weighted(weights["delete"]),
+		transitFunc.Weighted(weights["transit"]),
+		loginFunc.Weighted(weights["login"]),
+	)
+
 	opts := []worker.Option{
 		worker.WithConcurrency(concurrency),
 		worker.WithRateLimit(rps, rps),
@@ -182,7 +175,7 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr string, rps, concurre
 		opts = append(opts, worker.WithInfiniteRepetitions())
 	}
 
-	p := worker.NewWorkerPool(mixFunc, opts...)
+	p := worker.NewWorkerPool(composedWorker, opts...)
 	if err := p.Launch(); err != nil {
 		log.Fatal(err)
 	}

@@ -1,6 +1,6 @@
-# OpenBao Runbook
+# Runbook for OpenBao Example Environment
 
-Operational reference for working with this example environment.
+Operational reference for working with the example environment.
 See [README.md](README.md) for initial setup and deployment instructions.
 
 ## Credentials
@@ -137,6 +137,9 @@ go run -C examples/openbao/traffic . transit
 # Login using TLS client certificate (batch tokens, no storage).
 go run -C examples/openbao/traffic . cert-login
 
+# Login with service tokens (causes storage writes per login).
+go run -C examples/openbao/traffic . cert-login --token-type service
+
 # Mixed workload on KV v2: read/write/delete/transit/login.
 # Default mix: read=70,write=10,delete=10,transit=5,login=5.
 # Adjust --mix, --duration (e.g. 5m), --size, --pool.
@@ -145,6 +148,14 @@ go run -C examples/openbao/traffic . mix
 # Show all subcommands and global flags
 go run -C examples/openbao/traffic . --help
 ```
+
+**Token types**: `cert-login` and `mix` support `--token-type batch` (default) and `--token-type service`.
+Batch tokens are self-contained encrypted blobs with no storage cost — purely computational.
+Service tokens are heavyweight: each login causes multiple storage writes (token tracked on disk), making them useful for exercising disk I/O under load.
+Service tokens are automatically revoked after their TTL expires (system default is 32 days, configured to 5 minutes in `setup.sh`).
+List active service tokens with `bao list auth/token/accessors` (batch tokens are not tracked and won't appear).
+
+**KV v2 versioning**: The `kv/` engine keeps up to `max_versions` (3) versions per key. Writing to an existing key adds a new version; when the limit is exceeded the oldest version is permanently deleted. The default without our override is 10 versions. The `mix` command's delete operation uses `DELETE /kv/metadata/:path` which fully removes the key and all its versions from storage.
 
 ## Grafana Dashboard
 
@@ -157,17 +168,24 @@ Open at: http://localhost:3000/ -> Dashboards -> **OpenBao Resource Monitoring**
 
 The config file is at `examples/openbao/configs/openbao.hcl` (mounted into pods via hostPath at `/host`).
 
-## Restarting and Resetting
+## Restarting
 
 Data is stored on tmpfs (`emptyDir` with `medium: Memory`, see `manifests/`), so deleting pods destroys all data. To restart without losing data, kill the process instead — the container restarts but the pod (and its tmpfs) survives. You will need to unseal afterwards.
+
+To change configuration (e.g. TTL, policies, auth roles), just update the settings on the running cluster — no restart needed.
 
 ```bash
 # Restart without losing data (repeat for each pod)
 kubectl exec openbao-0 -- sh -c "kill 1"
 sleep 3
 kubectl exec openbao-0 -- sh -c "bao operator unseal $BAO_UNSEAL_KEY"
+```
 
-# Full reset (destroys data, re-initializes)
+## Wipe All Data
+
+Deletes all pods, destroying all stored data (tokens, secrets, leases, raft state). Use only when you want to start from a completely empty state.
+
+```bash
 kubectl delete pod -l app=openbao --force
 kubectl wait --for=jsonpath='{.status.phase}'=Running pod/openbao-0 pod/openbao-1 pod/openbao-2 --timeout=60s
 examples/openbao/setup.sh

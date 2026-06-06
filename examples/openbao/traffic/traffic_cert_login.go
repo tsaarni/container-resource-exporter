@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -8,19 +9,18 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/dustin/go-humanize"
 	"github.com/tsaarni/echoclient/client"
 	"github.com/tsaarni/echoclient/worker"
 )
 
-func runCertLogin(addr string, tlsCfg *tls.Config, count, rps, concurrency int) {
-	slog.Info("Starting cert-login", "count", humanize.Comma(int64(count)))
+func runCertLogin(addr string, tlsCfg *tls.Config, tokenType string, count, rps, concurrency int) {
+	slog.Info("Starting cert-login", "count", humanize.Comma(int64(count)), "token-type", tokenType)
 
-	certFile := certPath("client.pem")
-	keyFile := certPath("client-key.pem")
+	certFile := filepath.Join("..", "certs", "client.pem")
+	keyFile := filepath.Join("..", "certs", "client-key.pem")
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		log.Fatalf("Load client cert: %v", err)
@@ -32,8 +32,10 @@ func runCertLogin(addr string, tlsCfg *tls.Config, count, rps, concurrency int) 
 		},
 	})}
 
+	body := []byte(fmt.Sprintf(`{"name":"%s"}`, tokenType))
+
 	run(count, rps, concurrency, func(ctx context.Context, _ *worker.WorkerPool) error {
-		req, _ := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", nil)
+		req, _ := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", bytes.NewReader(body))
 		resp, err := loginClient.Do(req)
 		if err != nil {
 			return err
@@ -42,13 +44,4 @@ func runCertLogin(addr string, tlsCfg *tls.Config, count, rps, concurrency int) 
 		resp.Body.Close()
 		return nil
 	})
-}
-
-func certPath(name string) string {
-	exe, _ := os.Executable()
-	p := fmt.Sprintf("%s/certs/%s", strings.TrimSuffix(exe, "/traffic"), name)
-	if _, err := os.Stat(p); err == nil {
-		return p
-	}
-	return "certs/" + name
 }

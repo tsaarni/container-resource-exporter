@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/alecthomas/kong v1.15.0
 	github.com/dustin/go-humanize v1.0.1
-	github.com/tsaarni/echoclient v0.5.0
+	github.com/tsaarni/echoclient v0.6.0
 )
 
 require (

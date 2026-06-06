@@ -24,7 +24,7 @@ fi
 
 echo ">>> Generating certificates..."
 mkdir -p certs
-certyaml -d certs configs/certs.yaml
+go run github.com/tsaarni/certyaml/cmd/certyaml@latest -d certs configs/certs.yaml
 
 echo ">>> Deploying OpenBao..."
 kubectl apply -f manifests/openbao.yaml
@@ -73,7 +73,7 @@ echo ">>> Configuring secrets engines and auth methods..."
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable -version=1 -path=secret kv"
 # Enable KV v2 at kv/
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable -version=2 -path=kv kv"
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write kv/config max_versions=3"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write kv/config max_versions=3" # default is 10
 
 # Enable transit engine and create a default key
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable transit"
@@ -81,7 +81,8 @@ kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write -f transit/keys/
 
 # Enable cert auth and register the CA for client certificate login
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao auth enable cert"
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write auth/cert/certs/default certificate=@/host/certs/ca.pem policies=default token_type=batch"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write auth/cert/certs/batch certificate=@/host/certs/ca.pem policies=default token_type=batch"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write auth/cert/certs/service certificate=@/host/certs/ca.pem policies=default token_type=service token_ttl=5m" # default is 32 days
 
 ##############################################################################
 #
