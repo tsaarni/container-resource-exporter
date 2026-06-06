@@ -35,7 +35,10 @@ func runCertLogin(addr string, tlsCfg *tls.Config, tokenType string, count, rps,
 	body := []byte(fmt.Sprintf(`{"name":"%s"}`, tokenType))
 
 	run(count, rps, concurrency, func(ctx context.Context, _ *worker.WorkerPool) error {
-		req, _ := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
 		resp, err := loginClient.Do(req)
 		if err != nil {
 			return err

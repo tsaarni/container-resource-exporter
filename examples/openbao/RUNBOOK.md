@@ -31,13 +31,13 @@ kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao read -format=json sys/
   jq '.data.Gauges[] | select(.Name | test("runtime")) | {(.Name): .Value}'
 
 # List secrets
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv list secret/"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv list kv1/"
 
 # Count secrets
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv list secret/ | wc -l"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv list kv1/ | wc -l"
 
 # Read a secret
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv get secret/key-1"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv get kv1/key-1"
 ```
 
 ## Raft Leadership
@@ -155,7 +155,7 @@ Service tokens are heavyweight: each login causes multiple storage writes (token
 Service tokens are automatically revoked after their TTL expires (system default is 32 days, configured to 5 minutes in `setup.sh`).
 List active service tokens with `bao list auth/token/accessors` (batch tokens are not tracked and won't appear).
 
-**KV v2 versioning**: The `kv/` engine keeps up to `max_versions` (3) versions per key. Writing to an existing key adds a new version; when the limit is exceeded the oldest version is permanently deleted. The default without our override is 10 versions. The `mix` command's delete operation uses `DELETE /kv/metadata/:path` which fully removes the key and all its versions from storage.
+**KV v2 versioning**: The `kv2/` engine keeps up to `max_versions` (3) versions per key. Writing to an existing key adds a new version; when the limit is exceeded the oldest version is permanently deleted. The default without our override is 10 versions. The `mix` command's delete operation uses `DELETE /kv2/metadata/:path` which fully removes the key and all its versions from storage.
 
 ## Grafana Dashboard
 

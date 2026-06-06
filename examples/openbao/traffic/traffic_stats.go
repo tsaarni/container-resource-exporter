@@ -1,17 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 )
 
 var pods = []string{"openbao-0", "openbao-1", "openbao-2"}
@@ -35,17 +41,11 @@ func runStats() {
 		fmt.Fprintln(os.Stderr, "fetch exporter:", err)
 		os.Exit(1)
 	}
-	smaps    := parseMetric(raw, "process_smaps_rss_bytes")
-	smapsPSS := parseMetric(raw, "process_smaps_pss_bytes")
-	fsize    := parseMetric(raw, "container_file_size_bytes")
-	fdisk    := parseMetric(raw, "container_file_disk_usage_bytes")
-	mntUsed  := parseMetric(raw, "container_mountpoint_used_bytes")
-	mntCap   := parseMetric(raw, "container_mountpoint_capacity_bytes")
-	mntAvail := parseMetric(raw, "container_mountpoint_available_bytes")
-	cgMemCur  := parseMetric(raw, "cgroup_memory_current_bytes")
-	cgMemPeak := parseMetric(raw, "cgroup_memory_peak_bytes")
-	cgMemMax  := parseMetric(raw, "cgroup_memory_max_bytes")
-	cgCPUThrottle := parseMetric(raw, "cgroup_cpu_throttled_seconds_total")
+	families, err := parseMetrics(raw)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse metrics:", err)
+		os.Exit(1)
+	}
 
 	tlsCfg, err := tlsConfig(cacert)
 	if err != nil {
@@ -67,21 +67,21 @@ func runStats() {
 	}
 	var totals [3]float64
 	for _, r := range smapRows {
-		vals := getByPod(smaps, pods, map[string]string{"container": "openbao", "namespace": "default", "path": r.path})
+		vals := getByPod(families, "process_smaps_rss_bytes", pods, map[string]string{"container": "openbao", "namespace": "default", "path": r.path})
 		for i, v := range vals {
 			totals[i] += v
 		}
 		row(w, r.label, mbRow(vals))
 	}
 	row(w, "Total RSS", mbRow(totals[:]))
-	heapPSS := getByPod(smapsPSS, pods, map[string]string{"container": "openbao", "namespace": "default", "path": "[anon: Go: heap]"})
+	heapPSS := getByPod(families, "process_smaps_pss_bytes", pods, map[string]string{"container": "openbao", "namespace": "default", "path": "[anon: Go: heap]"})
 	row(w, "Go heap PSS", mbRow(heapPSS))
 
 	section(w, "Disk (file size / actual usage)")
 	for _, path := range []string{"/openbao/data/raft/raft.db", "/openbao/data/vault.db"} {
 		label := filepath.Base(path)
-		sizes := getByPod(fsize, pods, map[string]string{"container": "openbao", "namespace": "default", "path": path})
-		disks := getByPod(fdisk, pods, map[string]string{"container": "openbao", "namespace": "default", "path": path})
+		sizes := getByPod(families, "container_file_size_bytes", pods, map[string]string{"container": "openbao", "namespace": "default", "path": path})
+		disks := getByPod(families, "container_file_disk_usage_bytes", pods, map[string]string{"container": "openbao", "namespace": "default", "path": path})
 		row(w, label+" size", mbRow(sizes))
 		row(w, label+" used", mbRow(disks))
 	}
@@ -89,39 +89,40 @@ func runStats() {
 	section(w, "Mountpoint /openbao/data")
 	mntLabels := map[string]string{"container": "openbao", "device": "tmpfs", "fstype": "tmpfs", "mountpoint": "/openbao/data", "namespace": "default"}
 	for _, entry := range []struct {
-		label  string
-		metric map[string][]float64
+		label string
+		name  string
 	}{
-		{"capacity", mntCap},
-		{"used", mntUsed},
-		{"available", mntAvail},
+		{"capacity", "container_mountpoint_capacity_bytes"},
+		{"used", "container_mountpoint_used_bytes"},
+		{"available", "container_mountpoint_available_bytes"},
 	} {
-		row(w, entry.label, mbRow(getByPod(entry.metric, pods, mntLabels)))
+		row(w, entry.label, mbRow(getByPod(families, entry.name, pods, mntLabels)))
 	}
 
 	cgLabels := map[string]string{"container": "openbao", "namespace": "default"}
 	section(w, "Cgroup memory")
 	for _, entry := range []struct {
-		label  string
-		metric map[string][]float64
+		label string
+		name  string
 	}{
-		{"current", cgMemCur},
-		{"peak", cgMemPeak},
-		{"limit", cgMemMax},
+		{"current", "cgroup_memory_current_bytes"},
+		{"peak", "cgroup_memory_peak_bytes"},
+		{"limit", "cgroup_memory_max_bytes"},
 	} {
-		row(w, entry.label, mbRow(getByPod(entry.metric, pods, cgLabels)))
+		row(w, entry.label, mbRow(getByPod(families, entry.name, pods, cgLabels)))
 	}
 
 	section(w, "CPU throttling")
-	row(w, "throttled_seconds", secRow(getByPod(cgCPUThrottle, pods, cgLabels)))
+	row(w, "throttled_seconds", secRow(getByPod(families, "cgroup_cpu_throttled_seconds_total", pods, cgLabels)))
 
 	section(w, "OpenBao Go runtime")
 	type gaugeMap map[string]float64
 	gauges := make([]gaugeMap, len(ports))
 	for i, port := range ports {
-		body, err := httpGet(fmt.Sprintf("https://localhost:%d/v1/sys/metrics", port), token, tlsCfg)
+		url := fmt.Sprintf("https://localhost:%d/v1/sys/metrics", port)
+		body, err := httpGet(url, token, tlsCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "  warning: port %d: %v\n", port, err)
+			slog.Error("Failed to fetch metrics", "host", fmt.Sprintf("localhost:%d", port), "path", "/v1/sys/metrics", "err", err)
 			gauges[i] = gaugeMap{}
 			continue
 		}
@@ -160,22 +161,32 @@ func runStats() {
 	}
 
 	// Show stored data counts from the leader only (gauge collection runs on active node)
+	leaderPort := findLeader(ports, token, tlsCfg)
+	leaderIdx := 0
+	for i, p := range ports {
+		if p == leaderPort {
+			leaderIdx = i
+			break
+		}
+	}
 	section(w, "OpenBao stored data (leader)")
-	promBody, err := httpGet(fmt.Sprintf("https://localhost:%d/v1/sys/metrics?format=prometheus", ports[0]), token, tlsCfg)
+	promBody, err := httpGet(fmt.Sprintf("https://localhost:%d/v1/sys/metrics?format=prometheus", leaderPort), token, tlsCfg)
 	if err == nil {
-		promMetrics := parseMetric(promBody, "vault_secret_kv_count")
-		for labels, vals := range promMetrics {
-			mount := extractLabel(labels, "mount_point")
-			row(w, "kv secrets ("+mount+")", []string{strconv.Itoa(int(vals[0])), "-", "-"})
+		promFamilies, _ := parseMetrics(promBody)
+		if fam := promFamilies["vault_secret_kv_count"]; fam != nil {
+			for _, m := range fam.GetMetric() {
+				mount := getLabelValue(m, "mount_point")
+				row(w, "kv secrets ("+mount+")", leaderRow(leaderIdx, strconv.Itoa(int(m.GetGauge().GetValue()))))
+			}
 		}
-		if v := promGaugeValue(promBody, "vault_token_count"); v >= 0 {
-			row(w, "tokens", []string{strconv.Itoa(int(v)), "-", "-"})
-		}
-		if v := promGaugeValue(promBody, "vault_expire_num_leases"); v >= 0 {
-			row(w, "leases", []string{strconv.Itoa(int(v)), "-", "-"})
-		}
-		if v := promGaugeValue(promBody, "vault_identity_entity_count"); v >= 0 {
-			row(w, "entities", []string{strconv.Itoa(int(v)), "-", "-"})
+		for _, entry := range []struct{ metric, label string }{
+			{"vault_token_count", "tokens"},
+			{"vault_expire_num_leases", "leases"},
+			{"vault_identity_entity_count", "entities"},
+		} {
+			if v := gaugeValue(promFamilies, entry.metric); v >= 0 {
+				row(w, entry.label, leaderRow(leaderIdx, strconv.Itoa(int(v))))
+			}
 		}
 	}
 
@@ -220,6 +231,15 @@ func secRow(vals []float64) []string {
 	return out
 }
 
+func leaderRow(leaderIdx int, val string) []string {
+	out := make([]string, len(pods))
+	for i := range out {
+		out[i] = "-"
+	}
+	out[leaderIdx] = val
+	return out
+}
+
 func httpGet(url, token string, tlsCfg *tls.Config) ([]byte, error) {
 	transport := http.DefaultTransport
 	if tlsCfg != nil {
@@ -235,7 +255,28 @@ func httpGet(url, token string, tlsCfg *tls.Config) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
+func findLeader(ports []int, token string, tlsCfg *tls.Config) int {
+	for _, port := range ports {
+		body, err := httpGet(fmt.Sprintf("https://localhost:%d/v1/sys/health", port), token, tlsCfg)
+		if err != nil {
+			continue
+		}
+		var health struct{ Standby bool `json:"standby"` }
+		if json.Unmarshal(body, &health) == nil && !health.Standby {
+			return port
+		}
+	}
+	return ports[0]
 }
 
 func tlsConfig(caFile string) (*tls.Config, error) {
@@ -248,96 +289,69 @@ func tlsConfig(caFile string) (*tls.Config, error) {
 	return &tls.Config{RootCAs: pool}, nil
 }
 
-// parseMetric parses Prometheus text format lines for a given metric name.
-// Returns map of label-set (as sorted "k=v,..." string) -> value.
-func parseMetric(data []byte, name string) map[string][]float64 {
-	result := map[string][]float64{}
-	prefix := name + "{"
-	for _, line := range strings.Split(string(data), "\n") {
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		end := strings.LastIndex(line, "}")
-		if end < 0 {
-			continue
-		}
-		labelStr := line[len(prefix):end]
-		valStr := strings.TrimSpace(line[end+1:])
-		val, err := strconv.ParseFloat(valStr, 64)
-		if err != nil {
-			continue
-		}
-		result[labelStr] = append(result[labelStr], val)
-	}
-	return result
+// parseMetrics parses Prometheus text exposition format into metric families.
+func parseMetrics(data []byte) (map[string]*dto.MetricFamily, error) {
+	parser := expfmt.NewTextParser(model.UTF8Validation)
+	return parser.TextToMetricFamilies(bytes.NewReader(data))
 }
 
-// getByPod looks up values for each pod, matching the given fixed labels.
-func getByPod(metric map[string][]float64, pods []string, fixed map[string]string) []float64 {
+// getByPod returns one value per pod for the named metric matching the given labels.
+func getByPod(families map[string]*dto.MetricFamily, name string, pods []string, fixed map[string]string) []float64 {
 	out := make([]float64, len(pods))
+	fam := families[name]
+	if fam == nil {
+		return out
+	}
 	for i, pod := range pods {
-		match := map[string]string{"pod": pod}
+		match := make(map[string]string, len(fixed)+1)
 		for k, v := range fixed {
 			match[k] = v
 		}
-		for labelStr, vals := range metric {
-			if labelsMatch(labelStr, match) {
-				for _, v := range vals {
-					out[i] += v
-				}
-				break
+		match["pod"] = pod
+		for _, m := range fam.GetMetric() {
+			if labelsMatch(m, match) {
+				out[i] += metricValue(m)
 			}
 		}
 	}
 	return out
 }
 
-func labelsMatch(labelStr string, match map[string]string) bool {
+func labelsMatch(m *dto.Metric, match map[string]string) bool {
 	for k, v := range match {
-		needle := k + `="` + v + `"`
-		if !strings.Contains(labelStr, needle) {
+		if getLabelValue(m, k) != v {
 			return false
 		}
 	}
 	return true
 }
 
-func extractLabel(labelStr, key string) string {
-	needle := key + `="`
-	idx := strings.Index(labelStr, needle)
-	if idx < 0 {
-		return ""
-	}
-	start := idx + len(needle)
-	end := strings.Index(labelStr[start:], `"`)
-	if end < 0 {
-		return ""
-	}
-	return labelStr[start : start+end]
-}
-
-func promGaugeValue(data []byte, name string) float64 {
-	// Match lines like: metric_name{labels} value  OR  metric_name value
-	prefix := name + "{"
-	bare := name + " "
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, prefix) {
-			end := strings.LastIndex(line, "}")
-			if end < 0 {
-				continue
-			}
-			valStr := strings.TrimSpace(line[end+1:])
-			val, err := strconv.ParseFloat(valStr, 64)
-			if err == nil {
-				return val
-			}
-		} else if strings.HasPrefix(line, bare) {
-			valStr := strings.TrimSpace(line[len(name):])
-			val, err := strconv.ParseFloat(valStr, 64)
-			if err == nil {
-				return val
-			}
+func getLabelValue(m *dto.Metric, name string) string {
+	for _, lp := range m.GetLabel() {
+		if lp.GetName() == name {
+			return lp.GetValue()
 		}
 	}
-	return -1
+	return ""
+}
+
+func metricValue(m *dto.Metric) float64 {
+	if g := m.GetGauge(); g != nil {
+		return g.GetValue()
+	}
+	if c := m.GetCounter(); c != nil {
+		return c.GetValue()
+	}
+	if u := m.GetUntyped(); u != nil {
+		return u.GetValue()
+	}
+	return 0
+}
+
+func gaugeValue(families map[string]*dto.MetricFamily, name string) float64 {
+	fam := families[name]
+	if fam == nil || len(fam.GetMetric()) == 0 {
+		return -1
+	}
+	return fam.GetMetric()[0].GetGauge().GetValue()
 }

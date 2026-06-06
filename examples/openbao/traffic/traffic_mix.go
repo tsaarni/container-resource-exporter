@@ -20,9 +20,10 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/tsaarni/echoclient/client"
-	"github.com/tsaarni/echoclient/generator"
 	"github.com/tsaarni/echoclient/worker"
 )
+
+var validMixOps = map[string]bool{"read": true, "write": true, "delete": true, "transit": true, "login": true}
 
 func parseMixWeights(s string) map[string]int {
 	m := make(map[string]int)
@@ -30,6 +31,9 @@ func parseMixWeights(s string) map[string]int {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
 			log.Fatalf("invalid mix format: %q", part)
+		}
+		if !validMixOps[kv[0]] {
+			log.Fatalf("unknown mix operation %q (valid: read, write, delete, transit, login)", kv[0])
 		}
 		var v int
 		if _, err := fmt.Sscanf(kv[1], "%d", &v); err != nil {
@@ -40,22 +44,37 @@ func parseMixWeights(s string) map[string]int {
 	return m
 }
 
-func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rps, concurrency, size, pool int, duration time.Duration) {
+func runMix(addr string, tlsCfg *tls.Config, token, engine, mixStr, tokenType string, rps, concurrency, size, pool int, duration time.Duration) {
 	weights := parseMixWeights(mixStr)
 
-	// Uses KV v2 at kv/. Maintains a pool of keys with churn (create new + delete random).
-	existing := listKeys(addr, token, "kv/metadata")
+	// Maintains a pool of keys with churn (create new + delete random).
+	var listMount, dataPrefix, deletePrefix string
+	if engine == "2" {
+		listMount = "kv2/metadata"
+		dataPrefix = "/v1/kv2/data/"
+		deletePrefix = "/v1/kv2/metadata/"
+	} else {
+		listMount = "kv1"
+		dataPrefix = "/v1/kv1/"
+		deletePrefix = "/v1/kv1/"
+	}
+	existing := listKeys(addr, token, listMount)
 
 	if len(existing) < pool {
-		slog.Info("Seeding KV v2 pool", "need", humanize.Comma(int64(pool-len(existing))))
-		payload := generatePayload(size)
+		slog.Debug("Seeding pool", "engine", engine, "need", humanize.Comma(int64(pool-len(existing))))
+		var payload []byte
+		if engine == "2" {
+			payload = generateKV2Payload(size)
+		} else {
+			payload = generateKV1Payload(size)
+		}
 		var counter atomic.Int64
 		counter.Store(int64(len(existing)))
 		run(pool-len(existing), rps, concurrency, func(ctx context.Context, _ *worker.WorkerPool) error {
 			i := counter.Add(1)
-			return post(ctx, fmt.Sprintf("%s/v1/kv/data/key-%d", addr, i), token, payload)
+			return post(ctx, fmt.Sprintf("%s%skey-%d", addr, dataPrefix, i), token, payload)
 		})
-		existing = listKeys(addr, token, "kv/metadata")
+		existing = listKeys(addr, token, listMount)
 	}
 
 	slog.Info("Starting mix", "duration", duration, "pool", humanize.Comma(int64(pool)), "mix", mixStr)
@@ -76,7 +95,12 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rp
 
 	plaintext := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("A", size)))
 	encPayload := []byte(fmt.Sprintf(`{"plaintext":"%s"}`, plaintext))
-	writePayload := generatePayload(size)
+	var writePayload []byte
+	if engine == "2" {
+		writePayload = generateKV2Payload(size)
+	} else {
+		writePayload = generateKV1Payload(size)
+	}
 
 	// Reservoir: track live keys for random read/delete
 	var mu sync.Mutex
@@ -93,13 +117,13 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rp
 		}
 		key := keys[rand.IntN(len(keys))]
 		mu.Unlock()
-		return get(ctx, fmt.Sprintf("%s/v1/kv/data/%s", addr, key), token)
+		return get(ctx, fmt.Sprintf("%s%s%s", addr, dataPrefix, key), token)
 	}
 
 	var writeFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
 		id := nextID.Add(1)
 		key := fmt.Sprintf("key-%d", id)
-		if err := post(ctx, fmt.Sprintf("%s/v1/kv/data/%s", addr, key), token, writePayload); err != nil {
+		if err := post(ctx, fmt.Sprintf("%s%s%s", addr, dataPrefix, key), token, writePayload); err != nil {
 			return err
 		}
 		mu.Lock()
@@ -119,7 +143,7 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rp
 		keys[idx] = keys[len(keys)-1]
 		keys = keys[:len(keys)-1]
 		mu.Unlock()
-		resp, err := doReqCtx(ctx, "DELETE", fmt.Sprintf("%s/v1/kv/metadata/%s", addr, key), token, nil)
+		resp, err := doReqCtx(ctx, "DELETE", fmt.Sprintf("%s%s%s", addr, deletePrefix, key), token, nil)
 		if err != nil {
 			return err
 		}
@@ -147,7 +171,10 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rp
 	loginBody := []byte(fmt.Sprintf(`{"name":"%s"}`, tokenType))
 
 	var loginFunc worker.WorkerFunc = func(ctx context.Context, _ *worker.WorkerPool) error {
-		req, _ := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", bytes.NewReader(loginBody))
+		req, err := http.NewRequestWithContext(ctx, "POST", addr+"/v1/auth/cert/login", bytes.NewReader(loginBody))
+		if err != nil {
+			return err
+		}
 		resp, err := loginClient.Do(req)
 		if err != nil {
 			return err
@@ -182,8 +209,4 @@ func runMix(addr string, tlsCfg *tls.Config, token, mixStr, tokenType string, rp
 	p.Wait()
 }
 
-func generatePayload(size int) []byte {
-	r := generator.NewReader(generator.WithASCII(), generator.WithTotalSize(uint64(size)))
-	data, _ := io.ReadAll(r)
-	return []byte(fmt.Sprintf(`{"data":{"value":"%s"}}`, base64.StdEncoding.EncodeToString(data)))
-}
+

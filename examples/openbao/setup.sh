@@ -69,11 +69,11 @@ kubectl exec openbao-2 -- bao operator unseal "$UNSEAL_KEY" > /dev/null
 BAO_TOKEN=$(jq -r '.root_token' init.json)
 
 echo ">>> Configuring secrets engines and auth methods..."
-# Enable KV v1 at secret/ (OpenBao doesn't mount it by default)
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable -version=1 -path=secret kv"
-# Enable KV v2 at kv/
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable -version=2 -path=kv kv"
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write kv/config max_versions=3" # default is 10
+# Enable KV v1 at kv1/
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable -version=1 -path=kv1 kv"
+# Enable KV v2 at kv2/
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable -version=2 -path=kv2 kv"
+kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao write kv2/config max_versions=3" # default is 10
 
 # Enable transit engine and create a default key
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao secrets enable transit"
