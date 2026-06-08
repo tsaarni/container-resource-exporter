@@ -1,0 +1,14 @@
+subject: cn=external-ca
+---
+subject: cn=external-client
+issuer: cn=external-ca
+---
+subject: cn=cluster-internal-ca
+---
+subject: cn=echoserver
+issuer: cn=cluster-internal-ca
+sans:
+  - DNS:echoserver.127.0.0.1.nip.io
+  - DNS:echoserver-tls.127.0.0.1.nip.io
+  - DNS:echoserver-cert-auth.127.0.0.1.nip.io
+  - DNS:echoserver-jwt.127.0.0.1.nip.io

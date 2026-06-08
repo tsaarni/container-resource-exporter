@@ -11,13 +11,7 @@ This example demonstrates how to monitor Contour and Envoy using `container-reso
 
 ## Deployment Steps
 
-Create a Kind Cluster
-
-```bash
-kind create cluster --config configs/kind.yaml --name container-resource-exporter
-```
-
-Run the [setup.sh](setup.sh) script to deploy Contour, Envoy, and the observability stack (Prometheus, Grafana, and the exporter).
+Run the [setup.sh](setup.sh) script to create Kind cluster, deploy Contour, Envoy, and the observability stack (Prometheus, Grafana, and the exporter).
 
 
 ```bash
@@ -32,14 +26,26 @@ Once all pods are running, you can access the following services:
 - **Grafana**: [http://localhost:3000/](http://localhost:3000/)
   - Click "Dashboards" > "Contour & Envoy Observability" to view the dashboard.
   - Pick Contour or Envoy pod from the Pod dropdown to see metrics for that specific pod.
-- **Echoserver**: [http://echoserver.127.0.0.1.nip.io/](http://echoserver.127.0.0.1.nip.io/)
-  - Makes an HTTP request to the [`echoserver`](https://github.com/tsaarni/echoserver) workload through Envoy, which is monitored by the exporter.
+- **Prometheus**: [http://localhost:9090/](http://localhost:9090/)
+- **container-resource-exporter**: [http://localhost:8080/metrics](http://localhost:8080/metrics)
+- **Envoy Admin**: [http://localhost:9001/](http://localhost:9001/)
+- **Contour Metrics**: [http://localhost:9002/metrics](http://localhost:9002/metrics)
+- **Contour Debug**: [http://localhost:6060/debug/pprof/](http://localhost:6060/debug/pprof/)
+
+The [`echoserver`](https://github.com/tsaarni/echoserver) workload is exposed via four Envoy virtual hosts with different authentication modes:
+
+- [echoserver.127.0.0.1.nip.io](http://echoserver.127.0.0.1.nip.io/) — HTTP
+- [echoserver-tls.127.0.0.1.nip.io](https://echoserver-tls.127.0.0.1.nip.io/) — HTTPS
+- [echoserver-cert-auth.127.0.0.1.nip.io](https://echoserver-cert-auth.127.0.0.1.nip.io/) — HTTPS + client cert
+- [echoserver-jwt.127.0.0.1.nip.io](https://echoserver-jwt.127.0.0.1.nip.io/) — HTTPS + JWT
 
 To see the metrics in action, generate some traffic using the [`echoclient`](https://github.com/tsaarni/echoclient) tool:
 
 ```bash
 go run github.com/tsaarni/echoclient/cmd/echoclient@latest get -url http://echoserver.127.0.0.1.nip.io/ -concurrency 50 -duration 400s -rps 4000 -ramp-up-period 120s
 ```
+
+Use [`RUNBOOK.md`](RUNBOOK.md) for inspiration, or as instructions for LLM agents, on how to explore the collected metrics and data.
 
 ## Accessing Metrics in Testing
 
@@ -97,4 +103,10 @@ Memory Limit: 512.0 MB
 Memory Usage: 6.5% of limit
 Total CPU Time: 137.29 seconds
 Throttling %: 57.1%
+```
+
+## Cleanup
+
+```bash
+kind delete cluster --name contour
 ```

@@ -6,3 +6,7 @@ filters:
     pod: "*"
     container: "*"
     command: "*"
+  - namespace: "default"
+    pod: "echoserver-*"
+    container: "echoserver"
+    command: "*"

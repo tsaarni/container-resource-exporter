@@ -6,36 +6,10 @@ spec:
   type: NodePort
   ports:
     - port: 3000
-      nodePort: 3000
+      nodePort: 30300
       protocol: TCP
   selector:
     app: grafana
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-config
-data:
-  provisioning.yaml: |
-    apiVersion: 1
-    providers:
-      - name: 'dashboards'
-        orgId: 1
-        folder: ''
-        type: file
-        disableDeletion: false
-        editable: true
-        options:
-          path: /var/lib/grafana/dashboards
-  datasource.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: prometheus
-        type: prometheus
-        access: proxy
-        url: http://prometheus:9090
-        isDefault: true
-        uid: P1809F7CD0C75ACF3
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -62,22 +36,23 @@ spec:
               value: "true"
             - name: GF_AUTH_BASIC_ENABLED
               value: "false"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: "/var/lib/grafana/dashboards/envoy-details.json"
           volumeMounts:
-            - name: grafana-config
+            - name: host
               mountPath: /etc/grafana/provisioning/datasources/datasource.yaml
-              subPath: datasource.yaml
+              subPath: configs/grafana-datasource.yaml
               readOnly: true
-            - name: grafana-config
-              mountPath: /etc/grafana/provisioning/dashboards/provisioning.yaml
-              subPath: provisioning.yaml
+            - name: host
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath: configs/grafana-dashboards.yaml
               readOnly: true
-            - name: dashboards
-              mountPath: /var/lib/grafana/dashboards/
+            - name: host
+              mountPath: /var/lib/grafana/dashboards/envoy-details.json
+              subPath: configs/grafana-envoy-details.json
               readOnly: true
       volumes:
-        - name: dashboards
-          configMap:
-            name: grafana-dashboards
-        - name: grafana-config
-          configMap:
-            name: grafana-config
+        - name: host
+          hostPath:
+            path: /host
+            type: Directory

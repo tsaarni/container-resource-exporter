@@ -2,22 +2,62 @@ apiVersion: v1
 kind: Service
 metadata:
   name: container-resource-exporter-nodeport
-  namespace: default
 spec:
   type: NodePort
   ports:
     - name: metrics
       port: 8080
-      nodePort: 8080
+      nodePort: 30800
       targetPort: 8080
   selector:
     app: container-resource-exporter
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-admin
+  namespace: projectcontour
+spec:
+  type: NodePort
+  ports:
+    - port: 9001
+      nodePort: 30901
+      targetPort: 9001
+  selector:
+    app: envoy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: contour-metrics
+  namespace: projectcontour
+spec:
+  type: NodePort
+  ports:
+    - port: 8000
+      nodePort: 30902
+      targetPort: 8000
+  selector:
+    app: contour
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: contour-debug
+  namespace: projectcontour
+spec:
+  type: NodePort
+  ports:
+    - port: 6060
+      nodePort: 30606
+      targetPort: 6060
+  selector:
+    app: contour
+---
 apiVersion: projectcontour.io/v1
 kind: HTTPProxy
 metadata:
-  name: echoserver
-  namespace: default
+  name: echoserver-http
 spec:
   virtualhost:
     fqdn: echoserver.127.0.0.1.nip.io
@@ -25,3 +65,56 @@ spec:
     - services:
         - name: echoserver
           port: 80
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: echoserver-tls
+spec:
+  virtualhost:
+    fqdn: echoserver-tls.127.0.0.1.nip.io
+    tls:
+      secretName: echoserver-cert
+  routes:
+    - services:
+        - name: echoserver
+          port: 80
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: echoserver-cert-auth
+spec:
+  virtualhost:
+    fqdn: echoserver-cert-auth.127.0.0.1.nip.io
+    tls:
+      secretName: echoserver-cert
+      clientValidation:
+        caSecret: client-ca
+  routes:
+    - services:
+        - name: echoserver
+          port: 80
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: echoserver-jwt
+spec:
+  virtualhost:
+    fqdn: echoserver-jwt.127.0.0.1.nip.io
+    tls:
+      secretName: echoserver-cert
+    jwtProviders:
+      - name: default
+        issuer: https://example.com
+        audiences:
+          - echoserver
+        remoteJWKS:
+          uri: http://jwks-server.default.svc.cluster.local/jwks.json
+  routes:
+    - services:
+        - name: echoserver
+          port: 80
+      jwtVerificationPolicy:
+        require: default

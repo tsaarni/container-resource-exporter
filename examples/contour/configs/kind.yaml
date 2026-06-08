@@ -1,25 +1,26 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-kubeadmConfigPatches:
-  - |
-    kind: ClusterConfiguration
-    apiServer:
-      extraArgs:
-        # change port range so that we can bind privileged ports with NodePort
-        # this is needed so that we can use default http and https ports when connecting services
-        # with clients such as httpie without having to override HTTP header
-        # "Host: host1.external.com:31390" with "Host: host1.external.com"
-        "service-node-port-range": "80-32767"
 nodes:
 - role: control-plane
+- role: worker
   extraPortMappings:
   - containerPort: 80
-    hostPort: 80 # Envoy
+    hostPort: 80 # Envoy HTTP
   - containerPort: 443
-    hostPort: 443 # Envoy
-  - containerPort: 3000
+    hostPort: 443 # Envoy HTTPS
+  - containerPort: 30300
     hostPort: 3000 # Grafana
-  - containerPort: 8080
+  - containerPort: 30800
     hostPort: 8080 # Container Resource Exporter
-  - containerPort: 9090
+  - containerPort: 30900
     hostPort: 9090 # Prometheus
+  - containerPort: 30901
+    hostPort: 9001 # Envoy Admin
+  - containerPort: 30902
+    hostPort: 9002 # Contour Metrics
+  - containerPort: 30606
+    hostPort: 6060 # Contour Debug (pprof, DAG)
+  extraMounts:
+  - hostPath: ./
+    containerPath: /host
+    readOnly: true

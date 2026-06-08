@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jwks-server
+  labels:
+    app: jwks-server
+spec:
+  containers:
+  - name: httpd
+    image: busybox
+    command: ["httpd", "-f", "-h", "/host/certs"]
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: host
+      mountPath: /host
+      readOnly: true
+  volumes:
+  - name: host
+    hostPath:
+      path: /host
+      type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jwks-server
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: jwks-server

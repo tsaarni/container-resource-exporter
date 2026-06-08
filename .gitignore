@@ -30,3 +30,5 @@ Thumbs.db
 
 examples/openbao/certs/
 examples/openbao/init.json
+examples/openbao/traffic/traffic
+examples/contour/certs/

@@ -44,6 +44,7 @@ spec:
   type: NodePort
   ports:
     - port: 9090
+      nodePort: 30900
       targetPort: 9090
       protocol: TCP
   selector:
@@ -70,11 +71,12 @@ spec:
           ports:
             - containerPort: 9090
           volumeMounts:
-            - name: config
+            - name: host
               mountPath: /etc/prometheus/prometheus.yml
-              subPath: prometheus.yml
+              subPath: configs/prometheus.yml
               readOnly: true
       volumes:
-        - name: config
-          configMap:
-            name: prometheus-config
+        - name: host
+          hostPath:
+            path: /host
+            type: Directory
