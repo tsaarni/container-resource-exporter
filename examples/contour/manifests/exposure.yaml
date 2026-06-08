@@ -22,7 +22,7 @@ spec:
   ports:
     - port: 9001
       nodePort: 30901
-      targetPort: 9001
+      targetPort: 30901
   selector:
     app: envoy
 ---

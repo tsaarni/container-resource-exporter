@@ -18,6 +18,7 @@ import (
 type JWKSGenerateCmd struct {
 	Key  string `help:"Output private key PEM file." default:"../certs/jwt-signing-key.pem"`
 	JWKS string `help:"Output JWKS file." default:"../certs/jwks.json"`
+	KID  string `help:"Key ID." default:"1"`
 }
 
 type JWKSCmd struct {
@@ -26,6 +27,7 @@ type JWKSCmd struct {
 
 type JWTSignCmd struct {
 	Key      string        `help:"Private key PEM file." default:"../certs/jwt-signing-key.pem"`
+	KID      string        `help:"Key ID to include in JWT header." default:"1"`
 	Issuer   string        `help:"Token issuer." default:"https://example.com"`
 	Audience string        `help:"Token audience." default:"echoserver"`
 	Subject  string        `help:"Token subject." default:"user"`
@@ -61,7 +63,7 @@ func runJWKSGenerate(cmd *JWKSGenerateCmd) {
 			"y":   jwksB64url(key.PublicKey.Y),
 			"use": "sig",
 			"alg": "ES256",
-			"kid": "1",
+			"kid": cmd.KID,
 		}},
 	}
 	out, _ := json.MarshalIndent(jwks, "", "  ")
@@ -85,7 +87,7 @@ func runJWTSign(cmd *JWTSignCmd) {
 	}
 
 	now := time.Now()
-	header, _ := json.Marshal(map[string]string{"alg": "ES256", "typ": "JWT", "kid": "1"})
+	header, _ := json.Marshal(map[string]string{"alg": "ES256", "typ": "JWT", "kid": cmd.KID})
 	payload, _ := json.Marshal(map[string]any{
 		"iss": cmd.Issuer,
 		"aud": cmd.Audience,

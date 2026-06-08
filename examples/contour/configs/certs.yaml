@@ -6,9 +6,19 @@ issuer: cn=external-ca
 subject: cn=cluster-internal-ca
 ---
 subject: cn=echoserver
-issuer: cn=cluster-internal-ca
+issuer: cn=external-ca
 sans:
   - DNS:echoserver.127.0.0.1.nip.io
   - DNS:echoserver-tls.127.0.0.1.nip.io
   - DNS:echoserver-cert-auth.127.0.0.1.nip.io
   - DNS:echoserver-jwt.127.0.0.1.nip.io
+---
+subject: cn=echoserver-backend
+issuer: cn=cluster-internal-ca
+sans:
+  - DNS:echoserver.default.svc.cluster.local
+---
+subject: cn=untrusted-ca
+---
+subject: cn=untrusted-client
+issuer: cn=untrusted-ca

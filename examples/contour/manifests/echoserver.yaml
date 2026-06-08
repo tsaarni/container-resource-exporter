@@ -16,9 +16,9 @@ spec:
         image: ghcr.io/tsaarni/echoserver:latest
         env:
         - name: TLS_CERT_FILE
-          value: /host/certs/echoserver.pem
+          value: /host/certs/echoserver-backend.pem
         - name: TLS_KEY_FILE
-          value: /host/certs/echoserver-key.pem
+          value: /host/certs/echoserver-backend-key.pem
         - name: ENV_POD_NAME
           valueFrom:
             fieldRef:

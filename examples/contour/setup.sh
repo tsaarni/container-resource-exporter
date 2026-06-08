@@ -46,8 +46,8 @@ kubectl patch daemonset envoy -n projectcontour --type=strategic --patch '
         "containers": [{
           "name": "admin-proxy",
           "image": "alpine/socat:1.8.0.1",
-          "args": ["TCP-LISTEN:9001,fork,reuseaddr", "UNIX-CONNECT:/admin/admin.sock"],
-          "ports": [{"containerPort": 9001, "name": "admin", "protocol": "TCP"}],
+          "args": ["TCP-LISTEN:30901,fork,reuseaddr", "UNIX-CONNECT:/admin/admin.sock"],
+          "ports": [{"containerPort": 30901, "name": "admin", "protocol": "TCP"}],
           "volumeMounts": [{"name": "envoy-admin", "mountPath": "/admin"}],
           "resources": {"limits": {"cpu": "50m", "memory": "32Mi"}, "requests": {"cpu": "10m", "memory": "16Mi"}}
         }]
@@ -87,6 +87,11 @@ kubectl apply -f manifests/jwks-server.yaml
 
 echo ">>> Deploying echoserver workload..."
 kubectl apply -f manifests/echoserver.yaml
+
+# Create TLS secrets for HTTPProxy TLS termination at Envoy
+echo ">>> Creating TLS secrets for HTTPProxy..."
+kubectl create secret tls echoserver-cert --cert=certs/echoserver.pem --key=certs/echoserver-key.pem --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic client-ca --from-file=ca.crt=certs/external-ca.pem --dry-run=client -o yaml | kubectl apply -f -
 
 echo ">>> Exposing services..."
 kubectl apply -f manifests/exposure.yaml

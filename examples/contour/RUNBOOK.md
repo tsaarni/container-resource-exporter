@@ -11,10 +11,21 @@ See https://github.com/tsaarni/echoserver for more details.
 
 Echoserver is exposed via Envoy on following virtual hosts:
 
-* http://echoserver.127.0.0.1.nip.io/ - plain HTTP, no authentication
-* https://echoserver-tls.127.0.0.1.nip.io/ - HTTPS with TLS termination at Envoy
-* https://echoserver-cert-auth.127.0.0.1.nip.io/ - HTTPS with client certificate authentication.
-* https://echoserver-jwt.127.0.0.1.nip.io/ - HTTPS with JWT authentication, requires a valid JWT token.
+```bash
+# plain HTTP, no authentication
+curl http://echoserver.127.0.0.1.nip.io/
+
+# HTTPS with TLS termination at Envoy
+curl --cacert certs/external-ca.pem https://echoserver-tls.127.0.0.1.nip.io/
+
+# HTTPS with client certificate authentication
+curl --cacert certs/external-ca.pem --cert certs/external-client.pem --key certs/external-client-key.pem https://echoserver-cert-auth.127.0.0.1.nip.io/
+
+# HTTPS with JWT authentication, requires a valid JWT token
+# - generate a token with the helper CLI
+TOKEN=$(go run -C traffic . jwt sign)
+curl --cacert certs/external-ca.pem -H "Authorization: Bearer $TOKEN" https://echoserver-jwt.127.0.0.1.nip.io/
+```
 
 The `HTTPProxy` resources for above virtual hosts are defined in `example/contour/exposure.yaml`.
 
@@ -73,6 +84,8 @@ go run -C examples/contour/traffic . connections --rps 3000 --duration 60s
 Run `go run -C examples/contour/traffic . --help` for full usage.
 
 ## Envoy Admin Interface
+
+Contour configures Envoy's admin interface as a Unix domain socket. The `setup.sh` script injects an `admin-proxy` socat sidecar that bridges the socket to TCP port 30901, which is then exposed externally on the host as `localhost:9001` via kind's NodePort mapping.
 
 Upstream docs: https://www.envoyproxy.io/docs/envoy/latest/operations/admin
 
@@ -505,7 +518,8 @@ kubectl -n projectcontour get secret contourcert -o jsonpath='{..tls\.key}' | ba
 go run github.com/projectcontour/contour/cmd/contour serve \
   --xds-address=0.0.0.0 --xds-port=8001 \
   --envoy-service-http-port=8080 --envoy-service-https-port=8443 \
-  --contour-cafile=ca.crt --contour-cert-file=tls.crt --contour-key-file=tls.key
+  --contour-cafile=ca.crt --contour-cert-file=tls.crt --contour-key-file=tls.key \
+  --debug-http-address=0.0.0.0 --debug-http-port=6061
 ```
 
 ### Step 5: Restart Envoy to reconnect
