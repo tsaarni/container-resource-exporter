@@ -78,13 +78,14 @@ spec:
           readOnly: true
         - name: openbao-data
           mountPath: /openbao/data
+          subPathExpr: $(HOSTNAME)
       volumes:
       - name: host
         hostPath:
           path: /host
           type: Directory
       - name: openbao-data
-        emptyDir:
-          medium: Memory
-          sizeLimit: 64Mi
+        hostPath:
+          path: /openbao-volumes
+          type: Directory
 

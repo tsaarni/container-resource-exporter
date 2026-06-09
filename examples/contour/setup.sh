@@ -80,7 +80,7 @@ mkdir -p certs
 go run github.com/tsaarni/certyaml/cmd/certyaml@latest -d certs configs/certs.yaml
 
 echo ">>> Generating JWKS..."
-go run -C traffic . jwks generate
+go run -C tools . jwks generate
 
 echo ">>> Deploying JWKS server..."
 kubectl apply -f manifests/jwks-server.yaml

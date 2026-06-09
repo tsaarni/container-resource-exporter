@@ -10,7 +10,7 @@ This example demonstrates how to monitor [OpenBao](https://openbao.org/) using `
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Go](https://go.dev/)
 
-The environment will use `go run` to execute [`certyaml`](https://github.com/tsaarni/certyaml), [`raft-inspector`](https://github.com/tsaarni/raft-inspector/) and the traffic generator in the [`traffic`](traffic) directory.
+The environment will use `go run` to execute [`certyaml`](https://github.com/tsaarni/certyaml), [`raft-inspector`](https://github.com/tsaarni/raft-inspector/) and the tools in the [`tools`](tools) directory.
 
 ## Deployment
 
@@ -31,18 +31,31 @@ The following services are exposed on the host after setup:
 - **OpenBao (openbao-1)**: `https://localhost:8201`
 - **OpenBao (openbao-2)**: `https://localhost:8202`
 
-## Generating Load
+## Interacting with OpenBao
 
-To generate load on OpenBao, run the traffic generator, for example:
+The root token and unseal keys are stored in `init.json` after running the setup script.
+You can use `bao` CLI or REST API to interact with the cluster, for example:
 
 ```bash
-BAO_TOKEN=$(jq -r '.root_token' init.json)
-go run -C traffic . kv-write
+export BAO_TOKEN=$(jq -r '.root_token' init.json)
+export BAO_CACERT=$PWD/certs/ca.pem
+bao operator members
 ```
 
-Then open Grafana at http://localhost:3000/ -> Dashboards -> **OpenBao Resource Monitoring** and pick a pod from the dropdown.
+The [`tools`](tools) directory contains additional tools to interact with OpenBao, such as a traffic generator that simulates load.
+For example, to write 1000 secrets to the `kv1` engine, run:
 
-Use [`RUNBOOK.md`](RUNBOOK.md) for inspiration, or as instructions for LLM agents, on how to explore the collected metrics and data.
+```bash
+go run -C tools . kv-write --count=1000
+```
+
+To see all the sub-commands available in the tools, run:
+
+```bash
+go run -C tools . --help
+```
+
+If you are using an LLM agent, point it to [`AGENTS.md`](AGENTS.md) to use the environment as an interactive playground to test and learn about OpenBao.
 
 ## Cleanup
 

@@ -1,4 +1,4 @@
-# Runbook for Contour and Envoy Example Environment
+# Instructions for Using Contour and Envoy Test Bench
 
 Operational reference for working with the example environment.
 See [README.md](README.md) for initial setup, exposed ports and deployment instructions.
@@ -22,9 +22,7 @@ curl --cacert certs/external-ca.pem https://echoserver-tls.127.0.0.1.nip.io/
 curl --cacert certs/external-ca.pem --cert certs/external-client.pem --key certs/external-client-key.pem https://echoserver-cert-auth.127.0.0.1.nip.io/
 
 # HTTPS with JWT authentication, requires a valid JWT token
-# - generate a token with the helper CLI
-TOKEN=$(go run -C traffic . jwt sign)
-curl --cacert certs/external-ca.pem -H "Authorization: Bearer $TOKEN" https://echoserver-jwt.127.0.0.1.nip.io/
+curl --cacert certs/external-ca.pem -H "Authorization: Bearer $(go run -C tools . jwt sign)" https://echoserver-jwt.127.0.0.1.nip.io/
 ```
 
 The `HTTPProxy` resources for above virtual hosts are defined in `example/contour/exposure.yaml`.
@@ -41,6 +39,18 @@ When `setup.sh` is run, `certyaml` generates certificates using the configuratio
 | `external-client` | `external-ca` | Client cert for testing cert auth endpoint |
 | `cluster-internal-ca` | self-signed | CA for cluster-internal services |
 | `echoserver` | `cluster-internal-ca` | Server cert for echoserver (TLS termination at Envoy) |
+| `echoserver-backend` | `cluster-internal-ca` | Server cert for echoserver backend (re-encrypt) |
+| `untrusted-ca` | self-signed | CA not trusted by Envoy, for negative testing |
+| `untrusted-client` | `untrusted-ca` | Client cert not trusted by Envoy |
+
+### JWT Signing Keys
+
+| File | Purpose |
+|------|---------|
+| `jwt-signing-key.pem` | ECDSA P-256 private key for signing JWT tokens |
+| `jwks.json` | JWKS public key set matching `jwt-signing-key.pem` |
+| `jwt-signing-key-other.pem` | Alternate signing key (for testing key mismatch) |
+| `jwks-other.json` | JWKS for the alternate key |
 
 
 ### Tokens
@@ -48,14 +58,14 @@ When `setup.sh` is run, `certyaml` generates certificates using the configuratio
 Generate a JWT token for testing the JWT auth endpoint:
 
 ```
-TOKEN=$(go run -C examples/contour/traffic . jwt sign)
+TOKEN=$(go run -C examples/contour/tools . jwt sign)
 curl -k -H "Authorization: Bearer $TOKEN" https://echoserver-jwt.127.0.0.1.nip.io/
 ```
 
 Token options:
 
 ```bash
-go run -C examples/contour/traffic . jwt sign \
+go run -C examples/contour/tools . jwt sign \
   --issuer https://example.com \
   --audience echoserver \
   --subject alice \
@@ -65,23 +75,23 @@ go run -C examples/contour/traffic . jwt sign \
 Note: Envoy's jwt_authn filter has a default clock skew tolerance of 60 seconds, meaning expired tokens are still accepted for up to 60s after their `exp` time.
 
 
-## Traffic CLI
+## Tools CLI
 
-The `examples/contour/traffic/` directory contains a helper CLI for generating different types of traffic to the echoserver endpoints, as well as a combined resource summary command that collects statistics from Envoy, Contour, echoserver.
+The `examples/contour/tools/` directory contains a helper CLI for generating different types of traffic to the echoserver endpoints, as well as a combined resource summary command that collects statistics from Envoy, Contour, echoserver.
 
 Examples:
 
 ```bash
-go run -C examples/contour/traffic . stats
-go run -C examples/contour/traffic . http --rps 2000 --duration 120s
-go run -C examples/contour/traffic . tls --rps 2000 --duration 120s
-go run -C examples/contour/traffic . cert-auth --rps 500 --duration 60s
-go run -C examples/contour/traffic . jwt-load --rps 1000 --duration 60s
-go run -C examples/contour/traffic . upload --size 1048576 --rps 50 --duration 60s
-go run -C examples/contour/traffic . connections --rps 3000 --duration 60s
+go run -C examples/contour/tools . stats
+go run -C examples/contour/tools . http --rps 2000 --duration 120s
+go run -C examples/contour/tools . tls --rps 2000 --duration 120s
+go run -C examples/contour/tools . cert-auth --rps 500 --duration 60s
+go run -C examples/contour/tools . jwt-load --rps 1000 --duration 60s
+go run -C examples/contour/tools . upload --size 1048576 --rps 50 --duration 60s
+go run -C examples/contour/tools . connections --rps 3000 --duration 60s
 ```
 
-Run `go run -C examples/contour/traffic . --help` for full usage.
+Run `go run -C examples/contour/tools . --help` for full usage.
 
 ## Envoy Admin Interface
 
@@ -237,12 +247,6 @@ curl -s -X POST 'http://localhost:9001/logging?connection=trace'
 curl -s -X POST 'http://localhost:9001/logging?router=debug'
 ```
 
-Certificates
-
-```bash
-curl -s http://localhost:9001/certs | jq '.certificates[] | {ca: [.ca_cert[]? | {serial: .serial_number, expires: .expiration_time, days: .days_until_expiration}], chain: [.cert_chain[]? | {serial: .serial_number, sans: .subject_alt_names, expires: .expiration_time}]}'
-```
-
 Ready State
 
 ```bash
@@ -267,42 +271,15 @@ All commands in this section assume `ENVOY_PID` is set:
 ENVOY_PID=$(docker exec contour-worker pgrep -f "envoy.*config")
 ```
 
-### Envoy Network Namespace (via kind node)
-
 ```bash
-# List socket listeners (shows worker threads per port)
-docker exec contour-worker nsenter --net --target $ENVOY_PID ss -tlnp
-
-# Active connections
-docker exec contour-worker nsenter --net --target $ENVOY_PID ss -tnp
-
-# IP addresses
-docker exec contour-worker nsenter --net --target $ENVOY_PID ip addr show
-```
-
-### Capture Traffic Through Envoy
-
-# With wireshark
-
-```bash
-docker exec contour-worker nsenter --net --target $ENVOY_PID wireshark -i any -f "port 8080" -k
+docker exec contour-worker nsenter --net --target $ENVOY_PID <command>
 ```
 
 
 ## Contour Metrics
 
 ```bash
-# All metrics
 curl -s http://localhost:9002/metrics
-
-# DAG rebuild stats
-curl -s http://localhost:9002/metrics | grep contour_dagrebuild
-
-# HTTPProxy counts
-curl -s http://localhost:9002/metrics | grep contour_httpproxy
-
-# Go runtime
-curl -s http://localhost:9002/metrics | grep go_memstats
 ```
 
 Key metrics:
@@ -310,9 +287,6 @@ Key metrics:
 - `contour_dagrebuild_seconds` — DAG rebuild duration
 - `contour_httpproxy` — HTTPProxy count by namespace/status
 - `contour_dag_cache_object` — cached objects by kind
-- `go_memstats_alloc_bytes` — Go heap allocated bytes
-- `go_memstats_sys_bytes` — Go total system memory
-- `go_goroutines` — current goroutine count
 
 ## Contour Debug Port and pprof
 
@@ -354,7 +328,7 @@ See [METRICS.md](/METRICS.md) for the complete metric list. Below is a subset of
 To get a quick summary of metrics from the environment run
 
 ```
-go run -C examples/contour/traffic . stats
+go run -C examples/contour/tools . stats
 ```
 The output shows:
 
@@ -367,9 +341,8 @@ The output shows:
 
 ## HTTPProxy Experimentation
 
-Contour HTTPProxy reference: https://projectcontour.io/docs/main/config/fundamentals/
+Contour HTTPProxy reference: https://projectcontour.io/docs/main/config/api/
 
-See the "Observing xDS Updates" section for a full example of applying an HTTPProxy with `loadBalancerPolicy` and observing changes. To restore default, re-apply the same HTTPProxy without the `loadBalancerPolicy` field.
 
 ## Contour Logs
 

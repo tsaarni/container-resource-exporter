@@ -30,6 +30,6 @@ Thumbs.db
 
 examples/openbao/certs/
 examples/openbao/init.json
-examples/openbao/traffic/traffic
+examples/openbao/tools/tools
 examples/contour/certs/
-examples/contour/traffic/traffic
+examples/contour/tools/tools

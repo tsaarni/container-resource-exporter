@@ -1,4 +1,4 @@
-module github.com/tsaarni/container-resource-exporter/examples/openbao/traffic
+module github.com/tsaarni/container-resource-exporter/examples/contour/tools
 
 go 1.25.0
 

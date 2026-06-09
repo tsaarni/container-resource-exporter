@@ -8,20 +8,21 @@ This example demonstrates how to monitor Contour and Envoy using `container-reso
 
 - [Kind](https://kind.sigs.k8s.io/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [Go](https://go.dev/)
 
-## Deployment Steps
+The environment will use `go run` to execute [`certyaml`](https://github.com/tsaarni/certyaml), and the tools in the [`tools`](tools) directory.
+
+## Deployment
 
 Run the [setup.sh](setup.sh) script to create Kind cluster, deploy Contour, Envoy, and the observability stack (Prometheus, Grafana, and the exporter).
-
 
 ```bash
 ./setup.sh
 ```
 
+## Host Port Mappings
 
-## Generating Load and Observing Metrics
-
-Once all pods are running, you can access the following services:
+The following services are exposed on the host after setup:
 
 - **Grafana**: [http://localhost:3000/](http://localhost:3000/)
   - Click "Dashboards" > "Contour & Envoy Observability" to view the dashboard.
@@ -32,20 +33,34 @@ Once all pods are running, you can access the following services:
 - **Contour Metrics**: [http://localhost:9002/metrics](http://localhost:9002/metrics)
 - **Contour Debug**: [http://localhost:6060/debug/pprof/](http://localhost:6060/debug/pprof/)
 
-The [`echoserver`](https://github.com/tsaarni/echoserver) workload is exposed via four Envoy virtual hosts with different authentication modes:
+The [`echoserver`](https://github.com/tsaarni/echoserver) workload is exposed via four Envoy virtual hosts with different authentication modes.
 
-- [echoserver.127.0.0.1.nip.io](http://echoserver.127.0.0.1.nip.io/) — HTTP
-- [echoserver-tls.127.0.0.1.nip.io](https://echoserver-tls.127.0.0.1.nip.io/) — HTTPS
-- [echoserver-cert-auth.127.0.0.1.nip.io](https://echoserver-cert-auth.127.0.0.1.nip.io/) — HTTPS + client cert
-- [echoserver-jwt.127.0.0.1.nip.io](https://echoserver-jwt.127.0.0.1.nip.io/) — HTTPS + JWT
+## Interacting with Contour and Envoy
 
-To see the metrics in action, generate some traffic using the [`echoclient`](https://github.com/tsaarni/echoclient) tool:
+Send requests to the echoserver via Envoy
 
-```bash
-go run github.com/tsaarni/echoclient/cmd/echoclient@latest get -url http://echoserver.127.0.0.1.nip.io/ -concurrency 50 -duration 400s -rps 4000 -ramp-up-period 120s
+```
+curl http://echoserver.127.0.0.1.nip.io/
+curl --cacert certs/external-ca.pem https://echoserver-tls.127.0.0.1.nip.io/
+curl --cacert certs/external-ca.pem --cert certs/external-client.pem --key certs/external-client-key.pem https://echoserver-cert-auth.127.0.0.1.nip.io/
+curl --cacert certs/external-ca.pem -H "Authorization: Bearer $(go run -C tools . jwt sign)" https://echoserver-jwt.127.0.0.1.nip.io/
 ```
 
-Use [`RUNBOOK.md`](RUNBOOK.md) for inspiration, or as instructions for LLM agents, on how to explore the collected metrics and data.
+The [`tools`](tools) directory contains additional tools to interact with Contour and Envoy, such as a traffic generator that simulates load.
+For example, to generate 100 requests for 10 seconds, run:
+
+```bash
+go run -C tools . http --rps 100 --duration 10s
+```
+
+
+To see all the sub-commands available in the tools, run:
+
+```bash
+go run -C tools . --help
+```
+
+If you are using an LLM agent, point it to [`AGENTS.md`](AGENTS.md) to use the environment as an interactive playground to test and learn about Contour and Envoy.
 
 ## Accessing Metrics in Testing
 

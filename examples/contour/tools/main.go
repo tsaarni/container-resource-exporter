@@ -112,7 +112,9 @@ func withMetrics(f func()) {
 
 	ticker := time.NewTicker(5 * time.Second)
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case <-ticker.C:
@@ -127,6 +129,7 @@ func withMetrics(f func()) {
 
 	ticker.Stop()
 	close(done)
+	<-stopped
 	metrics.DumpMetrics(os.Stdout)
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,10 +20,9 @@ import (
 )
 
 var pods = []string{"envoy", "contour", "echoserver"}
-var containers = []string{"envoy", "contour", "echoserver"}
 
 func runStats() {
-	exporterRaw, err := httpGet("http://localhost:8080/metrics")
+	exporterRaw, err := httpGet("http://localhost:8080/metrics", nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fetch exporter:", err)
 		os.Exit(1)
@@ -33,7 +33,7 @@ func runStats() {
 		os.Exit(1)
 	}
 
-	envoyRaw, err := httpGet("http://localhost:9001/stats/prometheus")
+	envoyRaw, err := httpGet("http://localhost:9001/stats/prometheus", nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fetch envoy:", err)
 		os.Exit(1)
@@ -44,7 +44,7 @@ func runStats() {
 		os.Exit(1)
 	}
 
-	contourRaw, err := httpGet("http://localhost:9002/metrics")
+	contourRaw, err := httpGet("http://localhost:9002/metrics", nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fetch contour:", err)
 		os.Exit(1)
@@ -55,7 +55,7 @@ func runStats() {
 		os.Exit(1)
 	}
 
-	serverInfoRaw, err := httpGet("http://localhost:9001/server_info")
+	serverInfoRaw, err := httpGet("http://localhost:9001/server_info", nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fetch server_info:", err)
 		os.Exit(1)
@@ -171,22 +171,15 @@ func runStats() {
 	}
 
 	section(w, "Cgroup resources")
-	fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", "", "envoy", "contour", "echoserver")
-	cgMem := getByContainer(exporter, "cgroup_memory_current_bytes")
-	cgPeak := getByContainer(exporter, "cgroup_memory_peak_bytes")
-	cgLimit := getByContainer(exporter, "cgroup_memory_max_bytes")
-	cgThrottle := getByContainer(exporter, "cgroup_cpu_throttled_seconds_total")
-	fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", "memory_current", fmtMB(cgMem[0]), fmtMB(cgMem[1]), fmtMB(cgMem[2]))
-	fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", "memory_peak", fmtMB(cgPeak[0]), fmtMB(cgPeak[1]), fmtMB(cgPeak[2]))
-	fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", "memory_limit", fmtMB(cgLimit[0]), fmtMB(cgLimit[1]), fmtMB(cgLimit[2]))
-	fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", "cpu_throttled",
-		fmt.Sprintf("%.1fs", cgThrottle[0]), fmt.Sprintf("%.1fs", cgThrottle[1]), fmt.Sprintf("%.1fs", cgThrottle[2]))
+	row(w, "memory_current", mbRow(getByContainer(exporter, "cgroup_memory_current_bytes")))
+	row(w, "memory_peak", mbRow(getByContainer(exporter, "cgroup_memory_peak_bytes")))
+	row(w, "memory_limit", mbRow(getByContainer(exporter, "cgroup_memory_max_bytes")))
+	row(w, "cpu_throttled", secRow(getByContainer(exporter, "cgroup_cpu_throttled_seconds_total")))
 
 	section(w, "Memory RSS (smaps)")
-	fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", "", "envoy", "contour", "echoserver")
 	smapsRows := []struct {
-		label     string
-		paths     [3]string // per container
+		label string
+		paths [3]string // per container: envoy, contour, echoserver
 	}{
 		{"binary", [3]string{"/usr/local/bin/envoy", "/bin/contour", "/echoserver"}},
 		{"heap", [3]string{"[anon:tcmalloc_region_NORMAL]", "[anon: Go: heap]", "[anon: Go: heap]"}},
@@ -194,7 +187,7 @@ func runStats() {
 	}
 	for _, sr := range smapsRows {
 		vals := make([]float64, 3)
-		for i, container := range containers {
+		for i, container := range pods {
 			if sr.paths[i] == "" {
 				continue
 			}
@@ -202,21 +195,15 @@ func runStats() {
 			if container == "echoserver" {
 				ns = "default"
 			}
-			if fam := exporter["process_smaps_rss_bytes"]; fam != nil {
-				for _, m := range fam.GetMetric() {
-					if getLabelValue(m, "container") == container &&
-						getLabelValue(m, "namespace") == ns &&
-						getLabelValue(m, "path") == sr.paths[i] {
-						vals[i] += metricValue(m)
-					}
-				}
-			}
+			vals[i] = getByPod(exporter, "process_smaps_rss_bytes", []string{""}, map[string]string{
+				"container": container, "namespace": ns, "path": sr.paths[i],
+			})[0]
 		}
-		fmt.Fprintf(w, "  %-26s\t%-12s\t%-12s\t%s\n", sr.label, fmtMB(vals[0]), fmtMB(vals[1]), fmtMB(vals[2]))
+		row(w, sr.label, mbRow(vals))
 	}
 
 	// Echoserver
-	echoRaw, err := httpGet("http://echoserver.127.0.0.1.nip.io/metrics")
+	echoRaw, err := httpGet("http://echoserver.127.0.0.1.nip.io/metrics", nil)
 	if err == nil {
 		echo, err := parseMetrics(echoRaw)
 		if err == nil {
@@ -340,7 +327,6 @@ func percentileFromBuckets(buckets map[float64]uint64, totalCount uint64, percen
 	}
 	target := uint64(float64(totalCount) * percentile)
 
-	// Sort bucket boundaries
 	bounds := make([]float64, 0, len(buckets))
 	for b := range buckets {
 		bounds = append(bounds, b)
@@ -368,21 +354,16 @@ func formatDurationMs(seconds float64) string {
 	return fmt.Sprintf("%.2fs", seconds)
 }
 
-// histPercentile computes a percentile directly from a dto.Histogram.
-func histPercentile(h *dto.Histogram, p float64) float64 {
-	target := uint64(float64(h.GetSampleCount()) * p)
-	for _, b := range h.GetBucket() {
-		if b.GetCumulativeCount() >= target {
-			return b.GetUpperBound()
-		}
-	}
-	return 0
-}
-
 // --- Helpers ---
 
-func httpGet(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+func httpGet(url string, tlsCfg *tls.Config) ([]byte, error) {
+	transport := http.DefaultTransport
+	if tlsCfg != nil {
+		transport = &http.Transport{TLSClientConfig: tlsCfg}
+	}
+	client := &http.Client{Transport: transport}
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -414,19 +395,23 @@ func sumMetric(families map[string]*dto.MetricFamily, name string) float64 {
 	return total
 }
 
-func getByContainer(families map[string]*dto.MetricFamily, name string) []float64 {
-	out := make([]float64, len(containers))
+// getByPod returns one value per pod for the named metric matching the given fixed labels plus pod="<pod>".
+func getByPod(families map[string]*dto.MetricFamily, name string, podList []string, fixed map[string]string) []float64 {
+	out := make([]float64, len(podList))
 	fam := families[name]
 	if fam == nil {
 		return out
 	}
-	for i, container := range containers {
-		ns := "projectcontour"
-		if container == "echoserver" {
-			ns = "default"
+	for i, pod := range podList {
+		match := make(map[string]string, len(fixed)+1)
+		for k, v := range fixed {
+			match[k] = v
+		}
+		if pod != "" {
+			match["pod"] = pod
 		}
 		for _, m := range fam.GetMetric() {
-			if getLabelValue(m, "container") == container && getLabelValue(m, "namespace") == ns {
+			if labelsMatch(m, match) {
 				out[i] += metricValue(m)
 			}
 		}
@@ -434,27 +419,25 @@ func getByContainer(families map[string]*dto.MetricFamily, name string) []float6
 	return out
 }
 
-func getSmaps(families map[string]*dto.MetricFamily, name, targetContainer, path string) []float64 {
-	out := make([]float64, len(containers))
-	fam := families[name]
-	if fam == nil {
-		return out
-	}
-	for i, container := range containers {
-		if container != targetContainer {
-			continue
+func labelsMatch(m *dto.Metric, match map[string]string) bool {
+	for k, v := range match {
+		if getLabelValue(m, k) != v {
+			return false
 		}
+	}
+	return true
+}
+
+// getByContainer returns one value per entry in pods[], matched by container+namespace (no pod label).
+// envoy and contour use namespace "projectcontour"; echoserver uses "default".
+func getByContainer(families map[string]*dto.MetricFamily, name string) []float64 {
+	out := make([]float64, len(pods))
+	for i, container := range pods {
 		ns := "projectcontour"
 		if container == "echoserver" {
 			ns = "default"
 		}
-		for _, m := range fam.GetMetric() {
-			if getLabelValue(m, "container") == container &&
-				getLabelValue(m, "namespace") == ns &&
-				getLabelValue(m, "path") == path {
-				out[i] += metricValue(m)
-			}
-		}
+		out[i] = getByPod(families, name, []string{""}, map[string]string{"container": container, "namespace": ns})[0]
 	}
 	return out
 }
@@ -484,6 +467,7 @@ func metricValue(m *dto.Metric) float64 {
 func section(w *tabwriter.Writer, title string) {
 	w.Flush()
 	fmt.Printf("\n--- %s ---\n", title)
+	header(w)
 }
 
 func header(w *tabwriter.Writer) {
@@ -505,7 +489,7 @@ func row(w *tabwriter.Writer, label string, vals []string) {
 func mbRow(vals []float64) []string {
 	out := make([]string, len(vals))
 	for i, v := range vals {
-		out[i] = fmtMB(v)
+		out[i] = humanize.IBytes(uint64(v))
 	}
 	return out
 }

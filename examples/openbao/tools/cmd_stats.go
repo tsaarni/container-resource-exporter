@@ -15,6 +15,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/dustin/go-humanize"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
@@ -25,10 +26,6 @@ var ports = []int{8200, 8201, 8202}
 
 func runStats() {
 	token := os.Getenv("BAO_TOKEN")
-	if token == "" {
-		fmt.Fprintln(os.Stderr, "BAO_TOKEN environment variable is required")
-		os.Exit(1)
-	}
 
 	exporter := "http://localhost:8080/metrics"
 	cacert := os.Getenv("BAO_CACERT")
@@ -87,7 +84,7 @@ func runStats() {
 	}
 
 	section(w, "Mountpoint /openbao/data")
-	mntLabels := map[string]string{"container": "openbao", "device": "tmpfs", "fstype": "tmpfs", "mountpoint": "/openbao/data", "namespace": "default"}
+	mntLabels := map[string]string{"container": "openbao", "mountpoint": "/openbao/data", "namespace": "default"}
 	for _, entry := range []struct {
 		label string
 		name  string
@@ -118,11 +115,17 @@ func runStats() {
 	section(w, "OpenBao Go runtime")
 	type gaugeMap map[string]float64
 	gauges := make([]gaugeMap, len(ports))
+	var authError bool
 	for i, port := range ports {
 		url := fmt.Sprintf("https://localhost:%d/v1/sys/metrics", port)
 		body, err := httpGet(url, token, tlsCfg)
 		if err != nil {
-			slog.Error("Failed to fetch metrics", "host", fmt.Sprintf("localhost:%d", port), "path", "/v1/sys/metrics", "err", err)
+			if !authError && strings.Contains(err.Error(), "403") {
+				authError = true
+				slog.Warn("OpenBao returned 403 — set BAO_TOKEN to enable runtime metrics")
+			} else if !authError {
+				slog.Error("Failed to fetch metrics", "host", fmt.Sprintf("localhost:%d", port), "path", "/v1/sys/metrics", "err", err)
+			}
 			gauges[i] = gaugeMap{}
 			continue
 		}
@@ -170,22 +173,28 @@ func runStats() {
 		}
 	}
 	section(w, "OpenBao stored data (leader)")
-	promBody, err := httpGet(fmt.Sprintf("https://localhost:%d/v1/sys/metrics?format=prometheus", leaderPort), token, tlsCfg)
-	if err == nil {
-		promFamilies, _ := parseMetrics(promBody)
-		if fam := promFamilies["vault_secret_kv_count"]; fam != nil {
-			for _, m := range fam.GetMetric() {
-				mount := getLabelValue(m, "mount_point")
-				row(w, "kv secrets ("+mount+")", leaderRow(leaderIdx, strconv.Itoa(int(m.GetGauge().GetValue()))))
+	if authError {
+		row(w, "(skipped)", []string{"no valid token"})
+	} else {
+		promBody, err := httpGet(fmt.Sprintf("https://localhost:%d/v1/sys/metrics?format=prometheus", leaderPort), token, tlsCfg)
+		if err != nil {
+			row(w, "(unavailable)", []string{err.Error()})
+		} else {
+			promFamilies, _ := parseMetrics(promBody)
+			if fam := promFamilies["vault_secret_kv_count"]; fam != nil {
+				for _, m := range fam.GetMetric() {
+					mount := getLabelValue(m, "mount_point")
+					row(w, "kv secrets ("+mount+")", leaderRow(leaderIdx, strconv.Itoa(int(m.GetGauge().GetValue()))))
+				}
 			}
-		}
-		for _, entry := range []struct{ metric, label string }{
-			{"vault_token_count", "tokens"},
-			{"vault_expire_num_leases", "leases"},
-			{"vault_identity_entity_count", "entities"},
-		} {
-			if v := gaugeValue(promFamilies, entry.metric); v >= 0 {
-				row(w, entry.label, leaderRow(leaderIdx, strconv.Itoa(int(v))))
+			for _, entry := range []struct{ metric, label string }{
+				{"vault_token_count", "tokens"},
+				{"vault_expire_num_leases", "leases"},
+				{"vault_identity_entity_count", "entities"},
+			} {
+				if v := gaugeValue(promFamilies, entry.metric); v >= 0 {
+					row(w, entry.label, leaderRow(leaderIdx, strconv.Itoa(int(v))))
+				}
 			}
 		}
 	}
@@ -218,7 +227,7 @@ func row(w *tabwriter.Writer, label string, vals []string) {
 func mbRow(vals []float64) []string {
 	out := make([]string, len(vals))
 	for i, v := range vals {
-		out[i] = fmt.Sprintf("%.1f MB", v/1024/1024)
+		out[i] = humanize.IBytes(uint64(v))
 	}
 	return out
 }
@@ -260,7 +269,11 @@ func httpGet(url, token string, tlsCfg *tls.Config) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+		msg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+		if resp.StatusCode == 403 {
+			msg += " (check BAO_TOKEN)"
+		}
+		return nil, fmt.Errorf("%s", msg)
 	}
 	return body, nil
 }

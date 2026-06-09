@@ -112,6 +112,7 @@ func main() {
 	tlsCfg := loadCACert(cli.CACert)
 
 	httpClient = http.Client{
+		Timeout: 30 * time.Second,
 		Transport: client.NewMeasuringRoundTripper(&http.Transport{
 			TLSClientConfig:     tlsCfg,
 			MaxConnsPerHost:     10000,
@@ -139,7 +140,9 @@ func main() {
 	// Print metrics every 5 seconds.
 	ticker := time.NewTicker(5 * time.Second)
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case <-ticker.C:
@@ -167,6 +170,7 @@ func main() {
 
 	ticker.Stop()
 	close(done)
+	<-stopped
 	metrics.DumpMetrics(os.Stdout)
 }
 

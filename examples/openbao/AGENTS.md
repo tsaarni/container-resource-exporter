@@ -1,4 +1,4 @@
-# Runbook for OpenBao Example Environment
+# Instructions for Using OpenBao Test Bench
 
 Operational reference for working with the example environment.
 See [README.md](README.md) for initial setup and deployment instructions.
@@ -22,13 +22,6 @@ kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao status"
 
 # Cluster health
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao read sys/health"
-
-# Runtime metrics (heap, goroutines, GC)
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao read sys/metrics"
-
-# Go runtime stats as JSON (alloc_bytes, heap_objects, num_goroutines, gc)
-kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao read -format=json sys/metrics" | \
-  jq '.data.Gauges[] | select(.Name | test("runtime")) | {(.Name): .Value}'
 
 # List secrets
 kubectl exec openbao-0 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao kv list kv1/"
@@ -64,11 +57,16 @@ kubectl exec openbao-1 -- sh -c "BAO_TOKEN=$BAO_TOKEN bao operator raft snapshot
 
 ## Raft Storage Inspection (raft-inspector)
 
-OpenBao uses two BoltDB databases: `raft.db` stores the raft log (write-ahead log of operations), `vault.db` stores the FSM state (actual secret data and metadata). Log compaction and snapshots periodically truncate raft.db.
+OpenBao uses two BoltDB databases: `/openbao/data/raft/raft.db` stores the raft log (log of operations), `/openbao/data/vault.db` stores the FSM state (actual secret data and metadata).
+Data is stored on loop-backed ext4 filesystems (256 MB per pod) that do not count against the container's cgroup memory. The `setup.sh` script creates sparse image files inside the kind node, formats them as ext4, and loop-mounts them. The StatefulSet uses `hostPath` with `subPathExpr` so each pod gets its own filesystem. `df` inside pods reports the correct 230 MB capacity. Adjust `VOLUME_SIZE` in `setup.sh` to change the per-pod disk size.
 
+Log compaction and snapshots periodically truncate `raft.db`.
+Default settings are defined in `openbao.hcl`.
 Note: after traffic stops, snapshots, GC, and log compaction may still run. Wait 10-30 seconds before collecting final measurements.
 
-Offline inspection of `raft.db` and `vault.db` directly from the pod's data directory. Works while the server is running. See https://github.com/tsaarni/raft-inspector and https://github.com/tsaarni/raft-inspector/blob/main/raft-inspector.md for full documentation.
+Offline inspection of `raft.db` and `vault.db` directly from the pod's data directory.
+Works while the server is running.
+See https://github.com/tsaarni/raft-inspector and https://github.com/tsaarni/raft-inspector/blob/main/raft-inspector.md for full documentation.
 
 ```bash
 # Copy data directory from a pod
@@ -86,18 +84,31 @@ go run github.com/tsaarni/raft-inspector@latest fsm /tmp/openbao-data-0 \
     --unseal-key-file examples/openbao/init.json
 ```
 
-## Prometheus Metrics (from host)
+## Metrics
 
-Requires `telemetry` block in `configs/openbao.hcl` (already configured).
+Following commands are executed on host.
+
+### Combined Stats Summary
+
+For a quick combined summary of all resource usage, run the `stats` command in the tools directory. It prints memory (smaps RSS/PSS), disk usage, cgroup memory, CPU throttling, and OpenBao Go runtime stats, secret engine metrics:
 
 ```bash
-CA=examples/openbao/certs/ca.pem
-
-curl -s --cacert $CA "https://localhost:8200/v1/sys/metrics?format=prometheus" \
-  -H "X-Vault-Token: $BAO_TOKEN" | grep heap
+export BAO_TOKEN=$(jq -r '.root_token' examples/openbao/init.json)
+go run -C examples/openbao/tools . stats
 ```
 
-## container-resource-exporter Metrics (from host)
+### Prometheus Metrics
+
+```bash
+BAO_CACERT=examples/openbao/certs/ca.pem
+
+curl -s --cacert $BAO_CACERT "https://localhost:8200/v1/sys/metrics?format=prometheus" \
+  -H "X-Vault-Token: $BAO_TOKEN"
+```
+
+This requires `telemetry` block in `configs/openbao.hcl` (already configured).
+
+### container-resource-exporter Metrics
 
 See [METRICS.md](/METRICS.md) for all collected metrics. The exporter is at `http://localhost:8080/metrics`.
 
@@ -106,47 +117,39 @@ See [METRICS.md](/METRICS.md) for all collected metrics. The exporter is at `htt
 curl -s http://localhost:8080/metrics | grep 'process_smaps_rss_bytes.*Go: heap"'
 ```
 
-## Combined Stats Summary
-
-Prints memory (smaps RSS/PSS), disk usage, cgroup memory, CPU throttling, and OpenBao Go runtime stats for all pods:
-
-```bash
-go run -C examples/openbao/traffic . stats
-```
-
-## Traffic Generator
+## Tools CLI
 
 All subcommands support `--rps` (default 200), `--concurrency` (default 10), and `--count` (default 1000, 0=infinite).
 
 ```bash
 # Write 1000 secrets of 10 KB each (~10 MB stored data).
 # Adjust --count and --size to control how much data is written.
-go run -C examples/openbao/traffic . kv-write
+go run -C examples/openbao/tools . kv-write
 
 # Read random secrets from a pool of 500 keys at 200 RPS.
 # Adjust --pool to control how many distinct keys are read.
-go run -C examples/openbao/traffic . kv-read
+go run -C examples/openbao/tools . kv-read
 
 # Delete secrets written by kv-write (keys named key-1..key-N).
-go run -C examples/openbao/traffic . bulk-delete
+go run -C examples/openbao/tools . bulk-delete
 
 # Encrypt+decrypt 10 KB payloads via transit engine (no disk I/O).
 # Adjust --size for different payload sizes.
-go run -C examples/openbao/traffic . transit
+go run -C examples/openbao/tools . transit
 
 # Login using TLS client certificate (batch tokens, no storage).
-go run -C examples/openbao/traffic . cert-login
+go run -C examples/openbao/tools . cert-login
 
 # Login with service tokens (causes storage writes per login).
-go run -C examples/openbao/traffic . cert-login --token-type service
+go run -C examples/openbao/tools . cert-login --token-type service
 
 # Mixed workload on KV v2: read/write/delete/transit/login.
 # Default mix: read=70,write=10,delete=10,transit=5,login=5.
 # Adjust --mix, --duration (e.g. 5m), --size, --pool.
-go run -C examples/openbao/traffic . mix
+go run -C examples/openbao/tools . mix
 
 # Show all subcommands and global flags
-go run -C examples/openbao/traffic . --help
+go run -C examples/openbao/tools . --help
 ```
 
 **Token types**: `cert-login` and `mix` support `--token-type batch` (default) and `--token-type service`.
@@ -170,7 +173,7 @@ The config file is at `examples/openbao/configs/openbao.hcl` (mounted into pods 
 
 ## Restarting
 
-Data is stored on tmpfs (`emptyDir` with `medium: Memory`, see `manifests/`), so deleting pods destroys all data. To restart without losing data, kill the process instead — the container restarts but the pod (and its tmpfs) survives. You will need to unseal afterwards.
+Data is stored on loop-backed ext4 filesystems on the kind node. Deleting a pod does **not** destroy data — the loop mount persists on the node. To restart without losing data, kill the process — the container restarts and reconnects to the same filesystem. You will need to unseal afterwards.
 
 To change configuration (e.g. TTL, policies, auth roles), just update the settings on the running cluster — no restart needed.
 
@@ -183,10 +186,19 @@ kubectl exec openbao-0 -- sh -c "bao operator unseal $BAO_UNSEAL_KEY"
 
 ## Wipe All Data
 
-Deletes all pods, destroying all stored data (tokens, secrets, leases, raft state). Use only when you want to start from a completely empty state.
+Scales down the StatefulSet, reformats the loop-backed filesystems, then scales back up for a clean state.
 
 ```bash
-kubectl delete pod -l app=openbao --force
+kubectl scale statefulset openbao --replicas=0
+kubectl wait --for=delete pod/openbao-0 --timeout=30s
+docker exec openbao-worker sh -c '
+  for p in openbao-0 openbao-1 openbao-2; do
+    umount /openbao-volumes/$p
+    mkfs.ext4 -q /openbao-volumes/${p}.img
+    mount -o loop /openbao-volumes/${p}.img /openbao-volumes/$p
+  done
+'
+kubectl scale statefulset openbao --replicas=3
 kubectl wait --for=jsonpath='{.status.phase}'=Running pod/openbao-0 pod/openbao-1 pod/openbao-2 --timeout=60s
 examples/openbao/setup.sh
 ```
