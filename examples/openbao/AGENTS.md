@@ -73,14 +73,14 @@ See https://github.com/tsaarni/raft-inspector and https://github.com/tsaarni/raf
 kubectl cp openbao-0:/openbao/data /tmp/openbao-data-0
 
 # Combined health overview: log indices, cluster membership, BoltDB free pages, space efficiency
-go run github.com/tsaarni/raft-inspector@latest status /tmp/openbao-data-0
+go run github.com/tsaarni/raft-inspector@latest status --data-dir /tmp/openbao-data-0
 
 # Raft log statistics: op distribution, hot keys, size
-go run github.com/tsaarni/raft-inspector@latest log /tmp/openbao-data-0 --stats \
+go run github.com/tsaarni/raft-inspector@latest log --data-dir /tmp/openbao-data-0 --stats \
     --unseal-key-file examples/openbao/init.json
 
 # FSM state: key counts per path segment, largest keys
-go run github.com/tsaarni/raft-inspector@latest fsm /tmp/openbao-data-0 \
+go run github.com/tsaarni/raft-inspector@latest fsm --data-dir /tmp/openbao-data-0 \
     --unseal-key-file examples/openbao/init.json
 ```
 

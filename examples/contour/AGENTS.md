@@ -487,6 +487,8 @@ kubectl -n projectcontour get secret contourcert -o jsonpath='{..tls\.key}' | ba
 
 ### Step 4: Run Contour on host
 
+Run in the foreground (interactive use):
+
 ```bash
 go run github.com/projectcontour/contour/cmd/contour serve \
   --xds-address=0.0.0.0 --xds-port=8001 \
@@ -495,6 +497,34 @@ go run github.com/projectcontour/contour/cmd/contour serve \
   --debug-http-address=0.0.0.0 --debug-http-port=6061
 ```
 
+Run in the background (for agents / automation):
+
+```bash
+nohup go run github.com/projectcontour/contour/cmd/contour serve \
+  --xds-address=0.0.0.0 --xds-port=8001 \
+  --envoy-service-http-port=8080 --envoy-service-https-port=8443 \
+  --contour-cafile=ca.crt --contour-cert-file=tls.crt --contour-key-file=tls.key \
+  --debug-http-address=0.0.0.0 --debug-http-port=6061 \
+  > /tmp/contour-host.log 2>&1 &
+echo $! > /tmp/contour-host.pid
+disown
+```
+
+To stop a backgrounded Contour:
+
+```bash
+kill $(cat /tmp/contour-host.pid) && rm /tmp/contour-host.pid
+```
+
+To check if it's running and view logs:
+
+```bash
+kill -0 $(cat /tmp/contour-host.pid 2>/dev/null) 2>/dev/null && echo "running" || echo "not running"
+tail -20 /tmp/contour-host.log
+```
+
+> **Note:** Do not use `pkill -f "contour"` — it matches unrelated cluster processes (etcd, kubelet, kube-proxy) whose arguments contain the cluster name "contour".
+
 ### Step 5: Restart Envoy to reconnect
 
 ```bash
@@ -502,3 +532,5 @@ kubectl -n projectcontour rollout restart daemonset envoy
 ```
 
 Envoy will now connect to the Contour running on the host via the EndpointSlice. You can set breakpoints, use `pprof`, or run with `-race`.
+
+> **Important:** Envoy's readiness probe depends on a successful xDS connection to Contour. Envoy pods will not become Ready until Contour is running and reachable. Always start Contour (step 4) before waiting for Envoy readiness or restarting Envoy.

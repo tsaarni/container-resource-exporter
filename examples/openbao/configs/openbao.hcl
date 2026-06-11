@@ -2,7 +2,8 @@ ui = false
 telemetry {
   prometheus_retention_time = "60s"
   disable_hostname = true
-  # How often to collect high-cardinality gauges like secret count, token count, entity count (default: 10m)
+  # How often to collect high-cardinality gauges like secret count, token count, entity count (default: 10m).
+  # (Causes CPU spikes every interval, throttles bad if low CPU limit is set).
   usage_gauge_period = "5s"
 }
 cluster_name = "openbao"
