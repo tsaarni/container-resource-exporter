@@ -186,22 +186,51 @@ kubectl exec openbao-0 -- sh -c "bao operator unseal $BAO_UNSEAL_KEY"
 
 ## Wipe All Data
 
-Scales down the StatefulSet, reformats the loop-backed filesystems, then scales back up for a clean state.
+Force-kills pods, unmounts all bind mounts that kubelet created, reformats filesystems, then runs `setup.sh` to bring the cluster back.
 
 ```bash
+# Force-delete pods so kubelet releases all bind mounts
+kubectl delete pods -l app=openbao --force --grace-period=0
 kubectl scale statefulset openbao --replicas=0
-kubectl wait --for=delete pod/openbao-0 --timeout=30s
+
+# Wipe: kill any leftover processes using the mounts, unmount everything, reformat
 docker exec openbao-worker sh -c '
   for p in openbao-0 openbao-1 openbao-2; do
-    umount /openbao-volumes/$p
-    mkfs.ext4 -q /openbao-volumes/${p}.img
+    fuser -km /openbao-volumes/$p 2>/dev/null || true
+  done
+  sleep 1
+  # Unmount all references (kubelet subpath bind mounts + our loop mounts)
+  for mnt in $(mount | grep openbao-volumes | awk "{print \$3}" | sort -r); do
+    umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+  done
+  sleep 1
+  for p in openbao-0 openbao-1 openbao-2; do
+    mkfs.ext4 -F -q /openbao-volumes/${p}.img
     mount -o loop /openbao-volumes/${p}.img /openbao-volumes/$p
   done
+  echo "All volumes wiped and remounted"
 '
-kubectl scale statefulset openbao --replicas=3
-kubectl wait --for=jsonpath='{.status.phase}'=Running pod/openbao-0 pod/openbao-1 pod/openbao-2 --timeout=60s
+
+# Redeploy
 examples/openbao/setup.sh
 ```
+
+## Using a Custom OpenBao Image
+
+To test with a locally built image (e.g. a patched version):
+
+```bash
+# Build the dev image from the OpenBao source tree
+make -C ~/work/openbao docker-dev
+
+# Load into kind
+kind load docker-image docker.io/library/openbao:dev --name openbao
+
+# Deploy (or wipe+redeploy) with the custom image
+OPENBAO_IMAGE=docker.io/library/openbao:dev examples/openbao/setup.sh
+```
+
+The `OPENBAO_IMAGE` environment variable overrides the image in the StatefulSet. When unset, the manifest's default image is used unchanged.
 
 The setup script initializes, unseals, and enables secret engines and auth methods needed by the traffic generator — see `setup.sh` for details.
 

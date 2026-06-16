@@ -54,7 +54,12 @@ mkdir -p certs
 go run github.com/tsaarni/certyaml/cmd/certyaml@latest -d certs configs/certs.yaml
 
 echo ">>> Deploying OpenBao..."
-kubectl apply -f manifests/openbao.yaml
+if [ -n "$OPENBAO_IMAGE" ]; then
+  echo "    Using custom image: $OPENBAO_IMAGE"
+  sed "s|image: .*|image: $OPENBAO_IMAGE|" manifests/openbao.yaml | kubectl apply -f -
+else
+  kubectl apply -f manifests/openbao.yaml
+fi
 
 echo ">>> Deploying container-resource-exporter..."
 kubectl apply -f manifests/container-resource-exporter.yaml
