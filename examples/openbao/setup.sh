@@ -27,12 +27,17 @@ echo ">>> Setting up loop-backed ext4 volumes..."
 KIND_NODE="${CLUSTER_NAME}-worker"
 docker exec "$KIND_NODE" sh -c '
   mkdir -p /openbao-volumes
+  # Use dedicated high-numbered loop devices to avoid collisions with snap.
+  # /dev is tmpfs in kind nodes so mknod is ephemeral (gone on container restart).
+  idx=100
   for pod in openbao-0 openbao-1 openbao-2; do
     IMG=/openbao-volumes/${pod}.img
     MNT=/openbao-volumes/${pod}
+    LODEV=/dev/loop${idx}
     mkdir -p "$MNT"
     # Skip if already mounted
     if mountpoint -q "$MNT" 2>/dev/null; then
+      idx=$((idx + 1))
       continue
     fi
     # Create image if it does not exist
@@ -40,7 +45,10 @@ docker exec "$KIND_NODE" sh -c '
       truncate -s '"$VOLUME_SIZE"' "$IMG"
       mkfs.ext4 -q "$IMG"
     fi
-    mount -o loop "$IMG" "$MNT"
+    [ -e "$LODEV" ] || mknod "$LODEV" b 7 $idx
+    losetup "$LODEV" "$IMG"
+    mount "$LODEV" "$MNT"
+    idx=$((idx + 1))
   done
 '
 
