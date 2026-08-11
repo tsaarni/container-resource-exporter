@@ -65,6 +65,21 @@ Labels: `namespace`, `pod`, `container`
 | `cgroup_pids_max` | Gauge | Hard limit on the number of processes allowed in the cgroup (from `pids.max`). |
 | `cgroup_pids_peak` | Gauge | Maximum number of processes ever present in the cgroup and its descendants (from `pids.peak`). |
 
+### I/O Metrics
+
+Labels: `namespace`, `pod`, `container`, `major`, `minor`
+
+These metrics are read from the cgroup v2 `io.stat` file, which provides per-device block I/O statistics. The `major` and `minor` labels identify the block device.
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `cgroup_io_read_bytes` | Gauge | Total number of bytes read from the block device by the cgroup (from `io.stat:rbytes`). |
+| `cgroup_io_write_bytes` | Gauge | Total number of bytes written to the block device by the cgroup (from `io.stat:wbytes`). |
+| `cgroup_io_read_ops` | Gauge | Total number of read I/O operations issued to the block device by the cgroup (from `io.stat:rios`). |
+| `cgroup_io_write_ops` | Gauge | Total number of write I/O operations issued to the block device by the cgroup (from `io.stat:wios`). |
+| `cgroup_io_discard_bytes` | Gauge | Total number of bytes discarded (TRIM) on the block device by the cgroup (from `io.stat:dbytes`). |
+| `cgroup_io_discard_ops` | Gauge | Total number of discard I/O operations issued to the block device by the cgroup (from `io.stat:dios`). |
+
 ## Smaps Metrics
 
 These metrics provide detailed per-process memory mapping information for all containers being monitored.
@@ -103,6 +118,24 @@ Labels: `namespace`, `pod`, `container`, `host_pid`, `ns_pid`, `comm`, `path`
 | `process_smaps_kernel_page_size_bytes` | Gauge | Kernel page size used for the mapping in bytes (from `KernelPageSize`). |
 | `process_smaps_mmu_page_size_bytes` | Gauge | MMU page size used for the mapping in bytes (from `MMUPageSize`). |
 | `process_smaps_locked_bytes` | Gauge | Amount of memory in the mapping that is locked in RAM in bytes (from `Locked`). |
+
+## Process I/O Metrics
+
+These metrics provide per-process I/O statistics for all containers being monitored.
+Process I/O metrics are read from `/proc/<pid>/io`, using the path configured in `paths.proc` (defaults to `/proc`).
+
+The `(from ...)` in descriptions tells the source of the metric within the `/proc/[pid]/io` file.
+
+Labels: `namespace`, `pod`, `container`, `host_pid`, `ns_pid`, `comm`
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `process_io_rchar_bytes` | Gauge | Total bytes read via read-like syscalls, including those served from page cache (from `rchar`). |
+| `process_io_wchar_bytes` | Gauge | Total bytes written via write-like syscalls, including those that do not hit storage (from `wchar`). |
+| `process_io_syscr` | Gauge | Total number of read I/O syscalls (from `syscr`). |
+| `process_io_syscw` | Gauge | Total number of write I/O syscalls (from `syscw`). |
+| `process_io_read_bytes` | Gauge | Total bytes that actually resulted in block device I/O for reads (from `read_bytes`). |
+| `process_io_write_bytes` | Gauge | Total bytes that actually resulted in block device I/O for writes (from `write_bytes`). |
 
 ## Disk (Filesystem) Metrics
 

@@ -60,11 +60,14 @@ func (c *Collector) collect(ctx context.Context) {
 	resetAllMetrics()
 
 	for _, container := range containers {
-		// Collect cgroup metrics
+		// Collect cgroup metrics (including io.stat)
 		c.collectCgroupMetrics(container)
 
 		// Collect smaps metrics
 		c.collectSmapsMetrics(container)
+
+		// Collect per-process I/O metrics
+		c.collectProcIoMetrics(container)
 
 		// Collect disk metrics
 		c.collectDiskMetrics(container)
@@ -120,6 +123,28 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 	}
 
 	slog.Debug("Collected cgroup metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)
+
+	// Collect io.stat metrics using the same cgroup
+	stats, err := cgroup.ReadIoStat()
+	if err != nil {
+		slog.Debug("Failed to read io.stat", "container", container.Container, "error", err)
+		return
+	}
+
+	for _, stat := range stats {
+		major := strconv.Itoa(stat.Major)
+		minor := strconv.Itoa(stat.Minor)
+		labels := []string{container.Namespace, container.Pod, container.Container, major, minor}
+
+		CgroupIoReadBytes.WithLabelValues(labels...).Set(float64(stat.Rbytes))
+		CgroupIoWriteBytes.WithLabelValues(labels...).Set(float64(stat.Wbytes))
+		CgroupIoReadOps.WithLabelValues(labels...).Set(float64(stat.Rios))
+		CgroupIoWriteOps.WithLabelValues(labels...).Set(float64(stat.Wios))
+		CgroupIoDiscardBytes.WithLabelValues(labels...).Set(float64(stat.Dbytes))
+		CgroupIoDiscardOps.WithLabelValues(labels...).Set(float64(stat.Dios))
+	}
+
+	slog.Debug("Collected io.stat metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "devices", len(stats))
 }
 
 func (c *Collector) readCgroupMetric(cgroup *CGroup, metric Metric) (int, error) {
@@ -183,6 +208,42 @@ func (c *Collector) setSmapsMetrics(container Container, proc ProcessInfo, m *Sm
 	ProcessSmapsKernelPageSize.WithLabelValues(labels...).Set(float64(m.KernelPageSizeBytes))
 	ProcessSmapsMMUPageSize.WithLabelValues(labels...).Set(float64(m.MMUPageSizeBytes))
 	ProcessSmapsLocked.WithLabelValues(labels...).Set(float64(m.LockedBytes))
+}
+
+func (c *Collector) collectProcIoMetrics(container Container) {
+	if len(container.PIDs) == 0 {
+		slog.Debug("No PIDs to collect proc io for", "container", container.Container)
+		return
+	}
+
+	for _, proc := range container.PIDs {
+		ioPath := filepath.Join(c.config.Paths.Proc, strconv.Itoa(proc.PID), "io")
+		f, err := os.Open(ioPath)
+		if err != nil {
+			slog.Debug("Failed to open proc io", "pid", proc.PID, "error", err)
+			continue
+		}
+
+		procIO, err := ParseProcIO(f)
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Warn("Failed to close proc io", "pid", proc.PID, "error", closeErr)
+		}
+		if err != nil {
+			slog.Warn("Failed to parse proc io", "pid", proc.PID, "error", err)
+			continue
+		}
+
+		labels := []string{container.Namespace, container.Pod, container.Container, strconv.Itoa(proc.PID), strconv.Itoa(proc.NSPID), proc.Comm}
+
+		ProcessIoRchar.WithLabelValues(labels...).Set(float64(procIO.Rchar))
+		ProcessIoWchar.WithLabelValues(labels...).Set(float64(procIO.Wchar))
+		ProcessIoSyscr.WithLabelValues(labels...).Set(float64(procIO.Syscr))
+		ProcessIoSyscw.WithLabelValues(labels...).Set(float64(procIO.Syscw))
+		ProcessIoReadBytes.WithLabelValues(labels...).Set(float64(procIO.ReadBytes))
+		ProcessIoWriteBytes.WithLabelValues(labels...).Set(float64(procIO.WriteBytes))
+
+		slog.Debug("Collected proc io metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "pid", proc.PID)
+	}
 }
 
 func (c *Collector) collectDiskMetrics(container Container) {

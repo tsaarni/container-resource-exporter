@@ -569,6 +569,100 @@ var (
 	)
 )
 
+// Cgroup v2 I/O metrics (from io.stat)
+
+var (
+	CgroupIoReadBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cgroup_io_read_bytes",
+			Help: "Total number of bytes read from block devices by the cgroup (from io.stat:rbytes).",
+		},
+		[]string{"namespace", "pod", "container", "major", "minor"},
+	)
+	CgroupIoWriteBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cgroup_io_write_bytes",
+			Help: "Total number of bytes written to block devices by the cgroup (from io.stat:wbytes).",
+		},
+		[]string{"namespace", "pod", "container", "major", "minor"},
+	)
+	CgroupIoReadOps = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cgroup_io_read_ops",
+			Help: "Total number of read I/O operations issued to block devices by the cgroup (from io.stat:rios).",
+		},
+		[]string{"namespace", "pod", "container", "major", "minor"},
+	)
+	CgroupIoWriteOps = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cgroup_io_write_ops",
+			Help: "Total number of write I/O operations issued to block devices by the cgroup (from io.stat:wios).",
+		},
+		[]string{"namespace", "pod", "container", "major", "minor"},
+	)
+	CgroupIoDiscardBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cgroup_io_discard_bytes",
+			Help: "Total number of bytes discarded (TRIM) on block devices by the cgroup (from io.stat:dbytes).",
+		},
+		[]string{"namespace", "pod", "container", "major", "minor"},
+	)
+	CgroupIoDiscardOps = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cgroup_io_discard_ops",
+			Help: "Total number of discard I/O operations issued to block devices by the cgroup (from io.stat:dios).",
+		},
+		[]string{"namespace", "pod", "container", "major", "minor"},
+	)
+)
+
+// Per-process I/O metrics (from /proc/[pid]/io)
+
+var (
+	ProcessIoRchar = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_io_rchar_bytes",
+			Help: "Total bytes read via read-like syscalls, including those served from page cache (from /proc/[pid]/io:rchar).",
+		},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	)
+	ProcessIoWchar = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_io_wchar_bytes",
+			Help: "Total bytes written via write-like syscalls, including those that do not hit storage (from /proc/[pid]/io:wchar).",
+		},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	)
+	ProcessIoSyscr = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_io_syscr",
+			Help: "Total number of read I/O syscalls (from /proc/[pid]/io:syscr).",
+		},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	)
+	ProcessIoSyscw = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_io_syscw",
+			Help: "Total number of write I/O syscalls (from /proc/[pid]/io:syscw).",
+		},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	)
+	ProcessIoReadBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_io_read_bytes",
+			Help: "Total bytes that actually resulted in block device I/O for reads (from /proc/[pid]/io:read_bytes).",
+		},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	)
+	ProcessIoWriteBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_io_write_bytes",
+			Help: "Total bytes that actually resulted in block device I/O for writes (from /proc/[pid]/io:write_bytes).",
+		},
+		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	)
+)
+
 // resetAllMetrics resets all metric vectors to remove stale series
 // from containers or processes that no longer exist.
 func resetAllMetrics() {
@@ -612,4 +706,20 @@ func resetAllMetrics() {
 	// File metrics
 	FileSizeBytes.Reset()
 	FileDiskUsageBytes.Reset()
+
+	// Cgroup I/O metrics
+	CgroupIoReadBytes.Reset()
+	CgroupIoWriteBytes.Reset()
+	CgroupIoReadOps.Reset()
+	CgroupIoWriteOps.Reset()
+	CgroupIoDiscardBytes.Reset()
+	CgroupIoDiscardOps.Reset()
+
+	// Process I/O metrics
+	ProcessIoRchar.Reset()
+	ProcessIoWchar.Reset()
+	ProcessIoSyscr.Reset()
+	ProcessIoSyscw.Reset()
+	ProcessIoReadBytes.Reset()
+	ProcessIoWriteBytes.Reset()
 }

@@ -5,8 +5,9 @@
 A Prometheus-compatible metrics exporter that monitors container resource usage of Kubernetes workloads.
 
 This exporter collects metrics by leveraging:
-- cgroup v2 for CPU, memory, and PID limits and usage
+- cgroup v2 for CPU, memory, PID limits and usage, and block I/O statistics
 - `/proc/[pid]/smaps` for per-process memory mapping statistics
+- `/proc/[pid]/io` for per-process I/O statistics
 - `/proc/[pid]/mountinfo` and `statfs` for filesystem disk usage
 - `/proc/[pid]/root` and `stat` for file sizes and disk usage
 
