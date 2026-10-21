@@ -2,11 +2,21 @@ package main
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+// Variable label sets shared by the metric descriptors.
+var (
+	containerLabels  = []string{"namespace", "pod", "container"}
+	processLabels    = []string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"}
+	smapsLabels      = []string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"}
+	ioStatLabels     = []string{"namespace", "pod", "container", "major", "minor"}
+	mountpointLabels = []string{"namespace", "pod", "container", "mountpoint", "fstype", "device"}
+	fileLabels       = []string{"namespace", "pod", "container", "path"}
 )
 
 type Metric struct {
-	gauge            *prometheus.GaugeVec
+	desc             *prometheus.Desc
+	valueType        prometheus.ValueType
 	cgroupFile       string
 	cgroupFileField  string
 	conversionFactor float64
@@ -18,332 +28,302 @@ type Metric struct {
 var cgroupMetrics = []Metric{
 	// Memory
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_current_bytes",
-				Help: "Total memory currently used by the cgroup and its descendants, in bytes (from memory.current).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_current_bytes",
+			"Total memory currently used by the cgroup and its descendants, in bytes (from memory.current).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "memory.current",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_peak_bytes",
-				Help: "Maximum memory usage recorded for the cgroup and its descendants since creation or last reset (from memory.peak).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_peak_bytes",
+			"Maximum memory usage recorded for the cgroup and its descendants since creation or last reset (from memory.peak).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "memory.peak",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_low_bytes",
-				Help: "Best-effort memory protection threshold below which memory is not reclaimed (from memory.low).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_low_bytes",
+			"Best-effort memory protection threshold below which memory is not reclaimed (from memory.low).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "memory.low",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_high_bytes",
-				Help: "Memory usage throttle limit above which processes are throttled and put under reclaim pressure (from memory.high).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_high_bytes",
+			"Memory usage throttle limit above which processes are throttled and put under reclaim pressure (from memory.high).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "memory.high",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_max_bytes",
-				Help: "Hard memory usage limit for the cgroup; exceeding this may trigger OOM killer (from memory.max).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_max_bytes",
+			"Hard memory usage limit for the cgroup; exceeding this may trigger OOM killer (from memory.max).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "memory.max",
 	},
 	// memory.stat fields
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_anon_bytes",
-				Help: "Amount of memory used in anonymous mappings such as brk(), sbrk(), and mmap(MAP_ANONYMOUS) (from memory.stat:anon).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_anon_bytes",
+			"Amount of memory used in anonymous mappings such as brk(), sbrk(), and mmap(MAP_ANONYMOUS) (from memory.stat:anon).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "anon",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_file_bytes",
-				Help: "Amount of memory used to cache filesystem data, including tmpfs and shared memory (from memory.stat:file).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_file_bytes",
+			"Amount of memory used to cache filesystem data, including tmpfs and shared memory (from memory.stat:file).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "file",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_shmem_bytes",
-				Help: "Amount of cached filesystem data that is swap-backed, such as tmpfs, shm segments, and shared anonymous mmap()s (from memory.stat:shmem).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_shmem_bytes",
+			"Amount of cached filesystem data that is swap-backed, such as tmpfs, shm segments, and shared anonymous mmap()s (from memory.stat:shmem).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "shmem",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_kernel_bytes",
-				Help: "Total kernel memory usage, including kernel_stack, pagetables, percpu, vmalloc, and slab (from memory.stat:kernel).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_kernel_bytes",
+			"Total kernel memory usage, including kernel_stack, pagetables, percpu, vmalloc, and slab (from memory.stat:kernel).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "kernel",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_slab_bytes",
-				Help: "Amount of memory used for storing in-kernel data structures (from memory.stat:slab).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_slab_bytes",
+			"Amount of memory used for storing in-kernel data structures (from memory.stat:slab).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "slab",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_slab_reclaimable_bytes",
-				Help: "Part of slab memory that might be reclaimed, such as dentries and inodes (from memory.stat:slab_reclaimable).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_slab_reclaimable_bytes",
+			"Part of slab memory that might be reclaimed, such as dentries and inodes (from memory.stat:slab_reclaimable).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "slab_reclaimable",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_slab_unreclaimable_bytes",
-				Help: "Part of slab memory that cannot be reclaimed on memory pressure (from memory.stat:slab_unreclaimable).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_slab_unreclaimable_bytes",
+			"Part of slab memory that cannot be reclaimed on memory pressure (from memory.stat:slab_unreclaimable).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "slab_unreclaimable",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_pagetables_bytes",
-				Help: "Amount of memory allocated for page tables (from memory.stat:pagetables).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_pagetables_bytes",
+			"Amount of memory allocated for page tables (from memory.stat:pagetables).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "pagetables",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_kernel_stack_bytes",
-				Help: "Amount of memory allocated to kernel stacks (from memory.stat:kernel_stack).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_kernel_stack_bytes",
+			"Amount of memory allocated to kernel stacks (from memory.stat:kernel_stack).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "kernel_stack",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_active_anon_bytes",
-				Help: "Amount of active anonymous memory on the internal memory management lists (from memory.stat:active_anon).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_active_anon_bytes",
+			"Amount of active anonymous memory on the internal memory management lists (from memory.stat:active_anon).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "active_anon",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_inactive_anon_bytes",
-				Help: "Amount of inactive anonymous memory on the internal memory management lists (from memory.stat:inactive_anon).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_inactive_anon_bytes",
+			"Amount of inactive anonymous memory on the internal memory management lists (from memory.stat:inactive_anon).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "inactive_anon",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_active_file_bytes",
-				Help: "Amount of active file-backed memory on the internal memory management lists (from memory.stat:active_file).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_active_file_bytes",
+			"Amount of active file-backed memory on the internal memory management lists (from memory.stat:active_file).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "active_file",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_inactive_file_bytes",
-				Help: "Amount of inactive file-backed memory on the internal memory management lists (from memory.stat:inactive_file).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_inactive_file_bytes",
+			"Amount of inactive file-backed memory on the internal memory management lists (from memory.stat:inactive_file).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "inactive_file",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_unevictable_bytes",
-				Help: "Amount of unevictable memory (from memory.stat:unevictable).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_unevictable_bytes",
+			"Amount of unevictable memory (from memory.stat:unevictable).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.GaugeValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "unevictable",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_pgfault_total",
-				Help: "Total number of page faults incurred by the cgroup (from memory.stat:pgfault).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_pgfault_total",
+			"Total number of page faults incurred by the cgroup (from memory.stat:pgfault).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.CounterValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "pgfault",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_memory_stat_pgmajfault_total",
-				Help: "Number of major page faults incurred by the cgroup (from memory.stat:pgmajfault).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_memory_stat_pgmajfault_total",
+			"Number of major page faults incurred by the cgroup (from memory.stat:pgmajfault).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.CounterValue,
 		cgroupFile:      "memory.stat",
 		cgroupFileField: "pgmajfault",
 	},
 	// CPU
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_cpu_usage_seconds_total",
-				Help: "Total CPU time consumed by all processes in the cgroup, in seconds (from cpu.stat:usage_usec).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_cpu_usage_seconds_total",
+			"Total CPU time consumed by all processes in the cgroup, in seconds (from cpu.stat:usage_usec).",
+			containerLabels, nil,
 		),
+		valueType:        prometheus.CounterValue,
 		cgroupFile:       "cpu.stat",
 		cgroupFileField:  "usage_usec",
 		conversionFactor: 0.000001,
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_cpu_user_seconds_total",
-				Help: "Total user mode CPU time consumed by the cgroup, in seconds (from cpu.stat:user_usec).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_cpu_user_seconds_total",
+			"Total user mode CPU time consumed by the cgroup, in seconds (from cpu.stat:user_usec).",
+			containerLabels, nil,
 		),
+		valueType:        prometheus.CounterValue,
 		cgroupFile:       "cpu.stat",
 		cgroupFileField:  "user_usec",
 		conversionFactor: 0.000001,
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_cpu_system_seconds_total",
-				Help: "Total system (kernel) mode CPU time consumed by the cgroup, in seconds (from cpu.stat:system_usec).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_cpu_system_seconds_total",
+			"Total system (kernel) mode CPU time consumed by the cgroup, in seconds (from cpu.stat:system_usec).",
+			containerLabels, nil,
 		),
+		valueType:        prometheus.CounterValue,
 		cgroupFile:       "cpu.stat",
 		cgroupFileField:  "system_usec",
 		conversionFactor: 0.000001,
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_cpu_nr_periods_total",
-				Help: "Number of enforcement intervals (periods) for CPU bandwidth (from cpu.stat:nr_periods).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_cpu_nr_periods_total",
+			"Number of enforcement intervals (periods) for CPU bandwidth (from cpu.stat:nr_periods).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.CounterValue,
 		cgroupFile:      "cpu.stat",
 		cgroupFileField: "nr_periods",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_cpu_nr_throttled_total",
-				Help: "Number of periods in which the cgroup was throttled due to CPU quota (from cpu.stat:nr_throttled).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_cpu_nr_throttled_total",
+			"Number of periods in which the cgroup was throttled due to CPU quota (from cpu.stat:nr_throttled).",
+			containerLabels, nil,
 		),
+		valueType:       prometheus.CounterValue,
 		cgroupFile:      "cpu.stat",
 		cgroupFileField: "nr_throttled",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_cpu_throttled_seconds_total",
-				Help: "Total time duration in seconds that the cgroup was throttled due to CPU quota (from cpu.stat:throttled_usec).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_cpu_throttled_seconds_total",
+			"Total time duration in seconds that the cgroup was throttled due to CPU quota (from cpu.stat:throttled_usec).",
+			containerLabels, nil,
 		),
+		valueType:        prometheus.CounterValue,
 		cgroupFile:       "cpu.stat",
 		cgroupFileField:  "throttled_usec",
 		conversionFactor: 0.000001,
 	},
 	// PIDs
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_pids_current",
-				Help: "Number of processes currently in the cgroup and its descendants (from pids.current).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_pids_current",
+			"Number of processes currently in the cgroup and its descendants (from pids.current).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "pids.current",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_pids_max",
-				Help: "Hard limit on the number of processes allowed in the cgroup (from pids.max).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_pids_max",
+			"Hard limit on the number of processes allowed in the cgroup (from pids.max).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "pids.max",
 	},
 	{
-		gauge: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "cgroup_pids_peak",
-				Help: "Maximum number of processes ever present in the cgroup and its descendants (from pids.peak).",
-			},
-			[]string{"namespace", "pod", "container"},
+		desc: prometheus.NewDesc(
+			"cgroup_pids_peak",
+			"Maximum number of processes ever present in the cgroup and its descendants (from pids.peak).",
+			containerLabels, nil,
 		),
+		valueType:  prometheus.GaugeValue,
 		cgroupFile: "pids.peak",
 	},
 }
@@ -351,7 +331,7 @@ var cgroupMetrics = []Metric{
 // Multi-value cgroup metrics (files with space-separated values like cpu.max)
 
 type MultiValueMetric struct {
-	gauges           []*prometheus.GaugeVec
+	descs            []*prometheus.Desc
 	cgroupFile       string
 	conversionFactor float64
 }
@@ -359,20 +339,16 @@ type MultiValueMetric struct {
 var cgroupMultiValueMetrics = []MultiValueMetric{
 	{
 		cgroupFile: "cpu.max",
-		gauges: []*prometheus.GaugeVec{
-			promauto.NewGaugeVec(
-				prometheus.GaugeOpts{
-					Name: "cgroup_cpu_max_quota_microseconds",
-					Help: "CPU time in microseconds that the cgroup can consume per period; -1 means no limit (from cpu.max).",
-				},
-				[]string{"namespace", "pod", "container"},
+		descs: []*prometheus.Desc{
+			prometheus.NewDesc(
+				"cgroup_cpu_max_quota_microseconds",
+				"CPU time in microseconds that the cgroup can consume per period; -1 means no limit (from cpu.max).",
+				containerLabels, nil,
 			),
-			promauto.NewGaugeVec(
-				prometheus.GaugeOpts{
-					Name: "cgroup_cpu_max_period_microseconds",
-					Help: "Length of the CPU bandwidth period in microseconds (from cpu.max).",
-				},
-				[]string{"namespace", "pod", "container"},
+			prometheus.NewDesc(
+				"cgroup_cpu_max_period_microseconds",
+				"Length of the CPU bandwidth period in microseconds (from cpu.max).",
+				containerLabels, nil,
 			),
 		},
 	},
@@ -382,344 +358,269 @@ var cgroupMultiValueMetrics = []MultiValueMetric{
 // https://docs.kernel.org/filesystems/proc.html
 
 var (
-	ProcessSmapsSize = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_size_bytes",
-			Help: "Total size of the memory mapping in bytes (from Size).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsSize = prometheus.NewDesc(
+		"process_smaps_size_bytes",
+		"Total size of the memory mapping in bytes (from Size).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsRss = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_rss_bytes",
-			Help: "Resident Set Size: amount of the mapping currently resident in RAM (bytes) (from Rss).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsRss = prometheus.NewDesc(
+		"process_smaps_rss_bytes",
+		"Resident Set Size: amount of the mapping currently resident in RAM (bytes) (from Rss).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsPss = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_pss_bytes",
-			Help: "Proportional Set Size: mapping's share of RAM, divided by number of processes sharing each page (bytes) (from Pss).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsPss = prometheus.NewDesc(
+		"process_smaps_pss_bytes",
+		"Proportional Set Size: mapping's share of RAM, divided by number of processes sharing each page (bytes) (from Pss).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsPssDirty = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_pss_dirty_bytes",
-			Help: "Proportional Set Size of dirty pages in the mapping (bytes) (from Pss_Dirty).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsPssDirty = prometheus.NewDesc(
+		"process_smaps_pss_dirty_bytes",
+		"Proportional Set Size of dirty pages in the mapping (bytes) (from Pss_Dirty).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsSharedClean = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_shared_clean_bytes",
-			Help: "Amount of clean shared pages in the mapping (bytes) (from Shared_Clean).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsSharedClean = prometheus.NewDesc(
+		"process_smaps_shared_clean_bytes",
+		"Amount of clean shared pages in the mapping (bytes) (from Shared_Clean).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsSharedDirty = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_shared_dirty_bytes",
-			Help: "Amount of dirty shared pages in the mapping (bytes) (from Shared_Dirty).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsSharedDirty = prometheus.NewDesc(
+		"process_smaps_shared_dirty_bytes",
+		"Amount of dirty shared pages in the mapping (bytes) (from Shared_Dirty).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsPrivateClean = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_private_clean_bytes",
-			Help: "Amount of clean private pages in the mapping (bytes) (from Private_Clean).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsPrivateClean = prometheus.NewDesc(
+		"process_smaps_private_clean_bytes",
+		"Amount of clean private pages in the mapping (bytes) (from Private_Clean).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsPrivateDirty = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_private_dirty_bytes",
-			Help: "Amount of dirty private pages in the mapping (bytes) (from Private_Dirty).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsPrivateDirty = prometheus.NewDesc(
+		"process_smaps_private_dirty_bytes",
+		"Amount of dirty private pages in the mapping (bytes) (from Private_Dirty).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsReferenced = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_referenced_bytes",
-			Help: "Amount of memory in the mapping currently marked as referenced or accessed (bytes) (from Referenced).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsReferenced = prometheus.NewDesc(
+		"process_smaps_referenced_bytes",
+		"Amount of memory in the mapping currently marked as referenced or accessed (bytes) (from Referenced).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsAnonymous = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_anonymous_bytes",
-			Help: "Amount of memory in the mapping that does not belong to any file (bytes) (from Anonymous).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsAnonymous = prometheus.NewDesc(
+		"process_smaps_anonymous_bytes",
+		"Amount of memory in the mapping that does not belong to any file (bytes) (from Anonymous).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsLazyFree = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_lazyfree_bytes",
-			Help: "Amount of memory in the mapping marked by madvise(MADV_FREE), to be freed under memory pressure (bytes) (from LazyFree).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsLazyFree = prometheus.NewDesc(
+		"process_smaps_lazyfree_bytes",
+		"Amount of memory in the mapping marked by madvise(MADV_FREE), to be freed under memory pressure (bytes) (from LazyFree).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsAnonHugePages = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_anon_hugepages_bytes",
-			Help: "Amount of memory in the mapping backed by transparent hugepages (bytes) (from AnonHugePages).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsAnonHugePages = prometheus.NewDesc(
+		"process_smaps_anon_hugepages_bytes",
+		"Amount of memory in the mapping backed by transparent hugepages (bytes) (from AnonHugePages).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsShmemPmdMapped = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_shmem_pmdmapped_bytes",
-			Help: "Amount of shared (shmem/tmpfs) memory in the mapping backed by huge pages (bytes) (from ShmemPmdMapped).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsShmemPmdMapped = prometheus.NewDesc(
+		"process_smaps_shmem_pmdmapped_bytes",
+		"Amount of shared (shmem/tmpfs) memory in the mapping backed by huge pages (bytes) (from ShmemPmdMapped).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsSharedHugetlb = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_shared_hugetlb_bytes",
-			Help: "Amount of memory in the mapping backed by hugetlbfs pages and shared (bytes) (from Shared_Hugetlb).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsSharedHugetlb = prometheus.NewDesc(
+		"process_smaps_shared_hugetlb_bytes",
+		"Amount of memory in the mapping backed by hugetlbfs pages and shared (bytes) (from Shared_Hugetlb).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsPrivateHugetlb = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_private_hugetlb_bytes",
-			Help: "Amount of memory in the mapping backed by hugetlbfs pages and private (bytes) (from Private_Hugetlb).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsPrivateHugetlb = prometheus.NewDesc(
+		"process_smaps_private_hugetlb_bytes",
+		"Amount of memory in the mapping backed by hugetlbfs pages and private (bytes) (from Private_Hugetlb).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsSwap = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_swap_bytes",
-			Help: "Amount of would-be-anonymous memory in the mapping that is swapped out (bytes) (from Swap).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsSwap = prometheus.NewDesc(
+		"process_smaps_swap_bytes",
+		"Amount of would-be-anonymous memory in the mapping that is swapped out (bytes) (from Swap).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsSwapPss = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_swap_pss_bytes",
-			Help: "Proportional share of swap space used by the mapping (bytes) (from SwapPss).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsSwapPss = prometheus.NewDesc(
+		"process_smaps_swap_pss_bytes",
+		"Proportional share of swap space used by the mapping (bytes) (from SwapPss).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsKernelPageSize = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_kernel_page_size_bytes",
-			Help: "Kernel page size used for the mapping (bytes) (from KernelPageSize).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsKernelPageSize = prometheus.NewDesc(
+		"process_smaps_kernel_page_size_bytes",
+		"Kernel page size used for the mapping (bytes) (from KernelPageSize).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsMMUPageSize = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_mmu_page_size_bytes",
-			Help: "MMU page size used for the mapping (bytes) (from MMUPageSize).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsMMUPageSize = prometheus.NewDesc(
+		"process_smaps_mmu_page_size_bytes",
+		"MMU page size used for the mapping (bytes) (from MMUPageSize).",
+		smapsLabels, nil,
 	)
-	ProcessSmapsLocked = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_smaps_locked_bytes",
-			Help: "Amount of memory in the mapping that is locked in RAM (bytes) (from Locked).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm", "path"},
+	ProcessSmapsLocked = prometheus.NewDesc(
+		"process_smaps_locked_bytes",
+		"Amount of memory in the mapping that is locked in RAM (bytes) (from Locked).",
+		smapsLabels, nil,
 	)
 )
 
 // Disk (filesystem) metrics per container mountpoint
 
 var (
-	MountpointCapacityBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "container_mountpoint_capacity_bytes",
-			Help: "Total capacity of the filesystem at the mountpoint in bytes (f_blocks * f_bsize).",
-		},
-		[]string{"namespace", "pod", "container", "mountpoint", "fstype", "device"},
+	MountpointCapacityBytes = prometheus.NewDesc(
+		"container_mountpoint_capacity_bytes",
+		"Total capacity of the filesystem at the mountpoint in bytes (f_blocks * f_bsize).",
+		mountpointLabels, nil,
 	)
-	MountpointAvailableBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "container_mountpoint_available_bytes",
-			Help: "Available space on the filesystem at the mountpoint in bytes (f_bavail * f_bsize).",
-		},
-		[]string{"namespace", "pod", "container", "mountpoint", "fstype", "device"},
+	MountpointAvailableBytes = prometheus.NewDesc(
+		"container_mountpoint_available_bytes",
+		"Available space on the filesystem at the mountpoint in bytes (f_bavail * f_bsize).",
+		mountpointLabels, nil,
 	)
-	MountpointUsedBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "container_mountpoint_used_bytes",
-			Help: "Used space on the filesystem at the mountpoint in bytes (capacity - available).",
-		},
-		[]string{"namespace", "pod", "container", "mountpoint", "fstype", "device"},
+	MountpointUsedBytes = prometheus.NewDesc(
+		"container_mountpoint_used_bytes",
+		"Used space on the filesystem at the mountpoint in bytes (capacity - available).",
+		mountpointLabels, nil,
 	)
 )
 
 // File size metrics for individually monitored files
 
 var (
-	FileSizeBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "container_file_size_bytes",
-			Help: "Total apparent size of files matching the configured pattern in bytes (sum of st_size from stat).",
-		},
-		[]string{"namespace", "pod", "container", "path"},
+	FileSizeBytes = prometheus.NewDesc(
+		"container_file_size_bytes",
+		"Total apparent size of files matching the configured pattern in bytes (sum of st_size from stat).",
+		fileLabels, nil,
 	)
-	FileDiskUsageBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "container_file_disk_usage_bytes",
-			Help: "Total actual disk space used by files matching the configured pattern in bytes (sum of st_blocks * 512 from stat).",
-		},
-		[]string{"namespace", "pod", "container", "path"},
+	FileDiskUsageBytes = prometheus.NewDesc(
+		"container_file_disk_usage_bytes",
+		"Total actual disk space used by files matching the configured pattern in bytes (sum of st_blocks * 512 from stat).",
+		fileLabels, nil,
 	)
 )
 
 // Cgroup v2 I/O metrics (from io.stat)
 
 var (
-	CgroupIoReadBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cgroup_io_read_bytes",
-			Help: "Total number of bytes read from block devices by the cgroup (from io.stat:rbytes).",
-		},
-		[]string{"namespace", "pod", "container", "major", "minor"},
+	CgroupIoReadBytes = prometheus.NewDesc(
+		"cgroup_io_read_bytes",
+		"Total number of bytes read from block devices by the cgroup (from io.stat:rbytes).",
+		ioStatLabels, nil,
 	)
-	CgroupIoWriteBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cgroup_io_write_bytes",
-			Help: "Total number of bytes written to block devices by the cgroup (from io.stat:wbytes).",
-		},
-		[]string{"namespace", "pod", "container", "major", "minor"},
+	CgroupIoWriteBytes = prometheus.NewDesc(
+		"cgroup_io_write_bytes",
+		"Total number of bytes written to block devices by the cgroup (from io.stat:wbytes).",
+		ioStatLabels, nil,
 	)
-	CgroupIoReadOps = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cgroup_io_read_ops",
-			Help: "Total number of read I/O operations issued to block devices by the cgroup (from io.stat:rios).",
-		},
-		[]string{"namespace", "pod", "container", "major", "minor"},
+	CgroupIoReadOps = prometheus.NewDesc(
+		"cgroup_io_read_ops",
+		"Total number of read I/O operations issued to block devices by the cgroup (from io.stat:rios).",
+		ioStatLabels, nil,
 	)
-	CgroupIoWriteOps = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cgroup_io_write_ops",
-			Help: "Total number of write I/O operations issued to block devices by the cgroup (from io.stat:wios).",
-		},
-		[]string{"namespace", "pod", "container", "major", "minor"},
+	CgroupIoWriteOps = prometheus.NewDesc(
+		"cgroup_io_write_ops",
+		"Total number of write I/O operations issued to block devices by the cgroup (from io.stat:wios).",
+		ioStatLabels, nil,
 	)
-	CgroupIoDiscardBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cgroup_io_discard_bytes",
-			Help: "Total number of bytes discarded (TRIM) on block devices by the cgroup (from io.stat:dbytes).",
-		},
-		[]string{"namespace", "pod", "container", "major", "minor"},
+	CgroupIoDiscardBytes = prometheus.NewDesc(
+		"cgroup_io_discard_bytes",
+		"Total number of bytes discarded (TRIM) on block devices by the cgroup (from io.stat:dbytes).",
+		ioStatLabels, nil,
 	)
-	CgroupIoDiscardOps = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cgroup_io_discard_ops",
-			Help: "Total number of discard I/O operations issued to block devices by the cgroup (from io.stat:dios).",
-		},
-		[]string{"namespace", "pod", "container", "major", "minor"},
+	CgroupIoDiscardOps = prometheus.NewDesc(
+		"cgroup_io_discard_ops",
+		"Total number of discard I/O operations issued to block devices by the cgroup (from io.stat:dios).",
+		ioStatLabels, nil,
 	)
 )
 
 // Per-process I/O metrics (from /proc/[pid]/io)
 
 var (
-	ProcessIoRchar = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_io_rchar_bytes",
-			Help: "Total bytes read via read-like syscalls, including those served from page cache (from /proc/[pid]/io:rchar).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	ProcessIoRchar = prometheus.NewDesc(
+		"process_io_rchar_bytes",
+		"Total bytes read via read-like syscalls, including those served from page cache (from /proc/[pid]/io:rchar).",
+		processLabels, nil,
 	)
-	ProcessIoWchar = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_io_wchar_bytes",
-			Help: "Total bytes written via write-like syscalls, including those that do not hit storage (from /proc/[pid]/io:wchar).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	ProcessIoWchar = prometheus.NewDesc(
+		"process_io_wchar_bytes",
+		"Total bytes written via write-like syscalls, including those that do not hit storage (from /proc/[pid]/io:wchar).",
+		processLabels, nil,
 	)
-	ProcessIoSyscr = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_io_syscr",
-			Help: "Total number of read I/O syscalls (from /proc/[pid]/io:syscr).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	ProcessIoSyscr = prometheus.NewDesc(
+		"process_io_syscr",
+		"Total number of read I/O syscalls (from /proc/[pid]/io:syscr).",
+		processLabels, nil,
 	)
-	ProcessIoSyscw = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_io_syscw",
-			Help: "Total number of write I/O syscalls (from /proc/[pid]/io:syscw).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	ProcessIoSyscw = prometheus.NewDesc(
+		"process_io_syscw",
+		"Total number of write I/O syscalls (from /proc/[pid]/io:syscw).",
+		processLabels, nil,
 	)
-	ProcessIoReadBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_io_read_bytes",
-			Help: "Total bytes that actually resulted in block device I/O for reads (from /proc/[pid]/io:read_bytes).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	ProcessIoReadBytes = prometheus.NewDesc(
+		"process_io_read_bytes",
+		"Total bytes that actually resulted in block device I/O for reads (from /proc/[pid]/io:read_bytes).",
+		processLabels, nil,
 	)
-	ProcessIoWriteBytes = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "process_io_write_bytes",
-			Help: "Total bytes that actually resulted in block device I/O for writes (from /proc/[pid]/io:write_bytes).",
-		},
-		[]string{"namespace", "pod", "container", "host_pid", "ns_pid", "comm"},
+	ProcessIoWriteBytes = prometheus.NewDesc(
+		"process_io_write_bytes",
+		"Total bytes that actually resulted in block device I/O for writes (from /proc/[pid]/io:write_bytes).",
+		processLabels, nil,
 	)
 )
 
-// resetAllMetrics resets all metric vectors to remove stale series
-// from containers or processes that no longer exist.
-func resetAllMetrics() {
+// describeAll sends the descriptors of all metrics exported by the collector.
+func describeAll(ch chan<- *prometheus.Desc) {
 	// Cgroup metrics
 	for _, m := range cgroupMetrics {
-		m.gauge.Reset()
+		ch <- m.desc
 	}
 	for _, m := range cgroupMultiValueMetrics {
-		for _, g := range m.gauges {
-			g.Reset()
+		for _, d := range m.descs {
+			ch <- d
 		}
 	}
 
 	// Smaps metrics
-	ProcessSmapsSize.Reset()
-	ProcessSmapsRss.Reset()
-	ProcessSmapsPss.Reset()
-	ProcessSmapsPssDirty.Reset()
-	ProcessSmapsSharedClean.Reset()
-	ProcessSmapsSharedDirty.Reset()
-	ProcessSmapsPrivateClean.Reset()
-	ProcessSmapsPrivateDirty.Reset()
-	ProcessSmapsReferenced.Reset()
-	ProcessSmapsAnonymous.Reset()
-	ProcessSmapsLazyFree.Reset()
-	ProcessSmapsAnonHugePages.Reset()
-	ProcessSmapsShmemPmdMapped.Reset()
-	ProcessSmapsSharedHugetlb.Reset()
-	ProcessSmapsPrivateHugetlb.Reset()
-	ProcessSmapsSwap.Reset()
-	ProcessSmapsSwapPss.Reset()
-	ProcessSmapsKernelPageSize.Reset()
-	ProcessSmapsMMUPageSize.Reset()
-	ProcessSmapsLocked.Reset()
+	ch <- ProcessSmapsSize
+	ch <- ProcessSmapsRss
+	ch <- ProcessSmapsPss
+	ch <- ProcessSmapsPssDirty
+	ch <- ProcessSmapsSharedClean
+	ch <- ProcessSmapsSharedDirty
+	ch <- ProcessSmapsPrivateClean
+	ch <- ProcessSmapsPrivateDirty
+	ch <- ProcessSmapsReferenced
+	ch <- ProcessSmapsAnonymous
+	ch <- ProcessSmapsLazyFree
+	ch <- ProcessSmapsAnonHugePages
+	ch <- ProcessSmapsShmemPmdMapped
+	ch <- ProcessSmapsSharedHugetlb
+	ch <- ProcessSmapsPrivateHugetlb
+	ch <- ProcessSmapsSwap
+	ch <- ProcessSmapsSwapPss
+	ch <- ProcessSmapsKernelPageSize
+	ch <- ProcessSmapsMMUPageSize
+	ch <- ProcessSmapsLocked
 
 	// Disk metrics
-	MountpointCapacityBytes.Reset()
-	MountpointAvailableBytes.Reset()
-	MountpointUsedBytes.Reset()
+	ch <- MountpointCapacityBytes
+	ch <- MountpointAvailableBytes
+	ch <- MountpointUsedBytes
 
 	// File metrics
-	FileSizeBytes.Reset()
-	FileDiskUsageBytes.Reset()
+	ch <- FileSizeBytes
+	ch <- FileDiskUsageBytes
 
 	// Cgroup I/O metrics
-	CgroupIoReadBytes.Reset()
-	CgroupIoWriteBytes.Reset()
-	CgroupIoReadOps.Reset()
-	CgroupIoWriteOps.Reset()
-	CgroupIoDiscardBytes.Reset()
-	CgroupIoDiscardOps.Reset()
+	ch <- CgroupIoReadBytes
+	ch <- CgroupIoWriteBytes
+	ch <- CgroupIoReadOps
+	ch <- CgroupIoWriteOps
+	ch <- CgroupIoDiscardBytes
+	ch <- CgroupIoDiscardOps
 
 	// Process I/O metrics
-	ProcessIoRchar.Reset()
-	ProcessIoWchar.Reset()
-	ProcessIoSyscr.Reset()
-	ProcessIoSyscw.Reset()
-	ProcessIoReadBytes.Reset()
-	ProcessIoWriteBytes.Reset()
+	ch <- ProcessIoRchar
+	ch <- ProcessIoWchar
+	ch <- ProcessIoSyscr
+	ch <- ProcessIoSyscw
+	ch <- ProcessIoReadBytes
+	ch <- ProcessIoWriteBytes
 }

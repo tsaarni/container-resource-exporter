@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -53,7 +54,6 @@ func main() {
 	slog.Info("Starting container-resource-exporter",
 		"config", *configPath,
 		"address", config.Server.Address,
-		"scrape_interval", config.ScrapeInterval,
 		"log_level", config.LogLevel,
 	)
 
@@ -63,13 +63,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start collector,
-	collector := NewCollector(config, kubeClient)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go collector.Start(ctx)
+	// Register collector; metrics are collected on each scrape.
+	prometheus.MustRegister(NewCollector(config, kubeClient.DiscoverContainers))
 
 	// Setup HTTP server.
 	mux := http.NewServeMux()
@@ -95,7 +90,6 @@ func main() {
 	go func() {
 		<-sigChan
 		slog.Info("Received shutdown signal")
-		cancel()
 		if err := server.Shutdown(context.Background()); err != nil {
 			slog.Error("Server shutdown error", "error", err)
 		}

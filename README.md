@@ -11,6 +11,7 @@ This exporter collects metrics by leveraging:
 - `/proc/[pid]/mountinfo` and `statfs` for filesystem disk usage
 - `/proc/[pid]/root` and `stat` for file sizes and disk usage
 
+Metrics are read on each request to `/metrics`, so every response reflects the state at the time of the request.
 See [documentation](METRICS.md) for a full list of supported metrics.
 This exporter was created because other existing solutions did not provide all of these metrics.
 
@@ -39,7 +40,6 @@ The `config.yaml` file supports the following options:
 | `paths.cgroup` | Path to cgroup v2 filesystem | `/sys/fs/cgroup` |
 | `paths.proc` | Path to proc filesystem | `/proc` |
 | `paths.cri_socket` | Path to CRI socket for container discovery | Auto-detected from `/run/containerd/containerd.sock`, `/run/crio/crio.sock`, or `/run/cri-dockerd.sock` |
-| `scrape_interval` | Interval for collecting metrics (Go duration format) | `1s` |
 | `log_level` | Logging level (debug, info, warn, error) | `info` |
 | `filters` | List of container filters to monitor | Required; at least one filter must be specified |
 | `filters[].namespace` | Kubernetes namespace pattern (supports `*` wildcard) | — |

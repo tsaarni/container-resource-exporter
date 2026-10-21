@@ -5,17 +5,15 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Server         ServerConfig      `yaml:"server"`
-	Paths          PathsConfig       `yaml:"paths"`
-	ScrapeInterval string            `yaml:"scrape_interval"`
-	LogLevel       string            `yaml:"log_level"`
-	Filters        []ContainerFilter `yaml:"filters"`
+	Server   ServerConfig      `yaml:"server"`
+	Paths    PathsConfig       `yaml:"paths"`
+	LogLevel string            `yaml:"log_level"`
+	Filters  []ContainerFilter `yaml:"filters"`
 }
 
 type ServerConfig struct {
@@ -83,10 +81,6 @@ func (c *Config) applyDefaults() {
 		c.Paths.CRISocket = detectCRISocket()
 	}
 
-	if c.ScrapeInterval == "" {
-		c.ScrapeInterval = "1s"
-	}
-
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
@@ -116,10 +110,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("paths.cri_socket was not auto-detected and is required to be specified")
 	}
 
-	if _, err := time.ParseDuration(c.ScrapeInterval); err != nil {
-		return fmt.Errorf("invalid scrape_interval: %w", err)
-	}
-
 	if len(c.Filters) == 0 {
 		return fmt.Errorf("at least one container filter is required")
 	}
@@ -142,12 +132,6 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
-}
-
-// GetScrapeInterval parses and returns the scrape interval as time.Duration.
-func (c *Config) GetScrapeInterval() time.Duration {
-	d, _ := time.ParseDuration(c.ScrapeInterval)
-	return d
 }
 
 // MatchesContainer checks if a container matches any of the configured filters.

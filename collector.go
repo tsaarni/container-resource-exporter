@@ -10,44 +10,41 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
+// discoveryTimeout bounds container discovery so that a hung CRI call does not block scrapes indefinitely.
+const discoveryTimeout = 10 * time.Second
+
+// Collector implements prometheus.Collector. Metrics are read on each scrape and
+// sent as const metrics, so a scrape always sees one complete and current collection.
 type Collector struct {
-	kubeClient *KubernetesClient
-	config     *Config
+	config   *Config
+	discover func(context.Context) ([]Container, error)
 }
 
-func NewCollector(config *Config, kubeClient *KubernetesClient) *Collector {
+func NewCollector(config *Config, discover func(context.Context) ([]Container, error)) *Collector {
 	return &Collector{
-		kubeClient: kubeClient,
-		config:     config,
+		config:   config,
+		discover: discover,
 	}
 }
 
-func (c *Collector) Start(ctx context.Context) {
-	ticker := time.NewTicker(c.config.GetScrapeInterval())
-	defer ticker.Stop()
-
-	slog.Info("Starting metric collection", "interval", c.config.ScrapeInterval)
-
-	// Collect immediately on start
-	c.collect(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("Stopping metric collection")
-			return
-		case <-ticker.C:
-			c.collect(ctx)
-		}
-	}
+// Describe implements prometheus.Collector.
+func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
+	describeAll(ch)
 }
 
-func (c *Collector) collect(ctx context.Context) {
-	containers, err := c.kubeClient.DiscoverContainers(ctx)
+// Collect implements prometheus.Collector.
+func (c *Collector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), discoveryTimeout)
+	defer cancel()
+
+	containers, err := c.discover(ctx)
 	if err != nil {
+		// Fail the scrape rather than expose an incomplete result.
 		slog.Error("Failed to discover containers", "error", err)
+		ch <- prometheus.NewInvalidMetric(prometheus.NewInvalidDesc(err), err)
 		return
 	}
 
@@ -56,30 +53,32 @@ func (c *Collector) collect(ctx context.Context) {
 		return
 	}
 
-	// Reset all metrics to remove stale series from disappeared containers/processes.
-	resetAllMetrics()
-
 	for _, container := range containers {
 		// Collect cgroup metrics (including io.stat)
-		c.collectCgroupMetrics(container)
+		c.collectCgroupMetrics(ch, container)
 
 		// Collect smaps metrics
-		c.collectSmapsMetrics(container)
+		c.collectSmapsMetrics(ch, container)
 
 		// Collect per-process I/O metrics
-		c.collectProcIoMetrics(container)
+		c.collectProcIoMetrics(ch, container)
 
 		// Collect disk metrics
-		c.collectDiskMetrics(container)
+		c.collectDiskMetrics(ch, container)
 
 		// Collect file metrics
-		c.collectFileMetrics(container)
+		c.collectFileMetrics(ch, container)
 	}
 
-	slog.Debug("Metric collection cycle complete", "containers", len(containers))
+	slog.Debug("Metric collection complete", "containers", len(containers))
 }
 
-func (c *Collector) collectCgroupMetrics(container Container) {
+// gauge sends a gauge const metric.
+func gauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, labels ...string) {
+	ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, value, labels...)
+}
+
+func (c *Collector) collectCgroupMetrics(ch chan<- prometheus.Metric, container Container) {
 	cgroup, err := FindCgroup(c.config.Paths.Cgroup, container.ID)
 	if err != nil {
 		slog.Warn("Failed to find cgroup", "container", container.Container, "error", err)
@@ -98,7 +97,7 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 			finalValue *= metric.conversionFactor
 		}
 
-		metric.gauge.WithLabelValues(container.Namespace, container.Pod, container.Container).Set(finalValue)
+		ch <- prometheus.MustNewConstMetric(metric.desc, metric.valueType, finalValue, container.Namespace, container.Pod, container.Container)
 	}
 
 	for _, metric := range cgroupMultiValueMetrics {
@@ -107,10 +106,10 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 			slog.Debug("Failed to read cgroup multi-value metric", "file", metric.cgroupFile, "error", err)
 			continue
 		}
-		if len(values) != len(metric.gauges) {
-			slog.Debug("Unexpected number of values in cgroup file", "file", metric.cgroupFile, "expected", len(metric.gauges), "got", len(values))
+		if len(values) != len(metric.descs) {
+			slog.Debug("Unexpected number of values in cgroup file", "file", metric.cgroupFile, "expected", len(metric.descs), "got", len(values))
 		}
-		for i, gauge := range metric.gauges {
+		for i, desc := range metric.descs {
 			if i >= len(values) {
 				break
 			}
@@ -118,7 +117,7 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 			if metric.conversionFactor != 0 {
 				finalValue *= metric.conversionFactor
 			}
-			gauge.WithLabelValues(container.Namespace, container.Pod, container.Container).Set(finalValue)
+			gauge(ch, desc, finalValue, container.Namespace, container.Pod, container.Container)
 		}
 	}
 
@@ -136,12 +135,12 @@ func (c *Collector) collectCgroupMetrics(container Container) {
 		minor := strconv.Itoa(stat.Minor)
 		labels := []string{container.Namespace, container.Pod, container.Container, major, minor}
 
-		CgroupIoReadBytes.WithLabelValues(labels...).Set(float64(stat.Rbytes))
-		CgroupIoWriteBytes.WithLabelValues(labels...).Set(float64(stat.Wbytes))
-		CgroupIoReadOps.WithLabelValues(labels...).Set(float64(stat.Rios))
-		CgroupIoWriteOps.WithLabelValues(labels...).Set(float64(stat.Wios))
-		CgroupIoDiscardBytes.WithLabelValues(labels...).Set(float64(stat.Dbytes))
-		CgroupIoDiscardOps.WithLabelValues(labels...).Set(float64(stat.Dios))
+		gauge(ch, CgroupIoReadBytes, float64(stat.Rbytes), labels...)
+		gauge(ch, CgroupIoWriteBytes, float64(stat.Wbytes), labels...)
+		gauge(ch, CgroupIoReadOps, float64(stat.Rios), labels...)
+		gauge(ch, CgroupIoWriteOps, float64(stat.Wios), labels...)
+		gauge(ch, CgroupIoDiscardBytes, float64(stat.Dbytes), labels...)
+		gauge(ch, CgroupIoDiscardOps, float64(stat.Dios), labels...)
 	}
 
 	slog.Debug("Collected io.stat metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "devices", len(stats))
@@ -154,7 +153,7 @@ func (c *Collector) readCgroupMetric(cgroup *CGroup, metric Metric) (int, error)
 	return cgroup.ReadIntegerField(metric.cgroupFile, metric.cgroupFileField)
 }
 
-func (c *Collector) collectSmapsMetrics(container Container) {
+func (c *Collector) collectSmapsMetrics(ch chan<- prometheus.Metric, container Container) {
 	if len(container.PIDs) == 0 {
 		slog.Debug("No PIDs to collect smaps for", "container", container.Container)
 		return
@@ -178,39 +177,39 @@ func (c *Collector) collectSmapsMetrics(container Container) {
 		}
 
 		for _, m := range mappings {
-			c.setSmapsMetrics(container, proc, m)
+			c.setSmapsMetrics(ch, container, proc, m)
 		}
 
 		slog.Debug("Collected smaps metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "pid", proc.PID, "ns_pid", proc.NSPID, "comm", proc.Comm, "mappings", len(mappings))
 	}
 }
 
-func (c *Collector) setSmapsMetrics(container Container, proc ProcessInfo, m *SmapsMapping) {
+func (c *Collector) setSmapsMetrics(ch chan<- prometheus.Metric, container Container, proc ProcessInfo, m *SmapsMapping) {
 	labels := []string{container.Namespace, container.Pod, container.Container, strconv.Itoa(proc.PID), strconv.Itoa(proc.NSPID), proc.Comm, m.Path}
 
-	ProcessSmapsSize.WithLabelValues(labels...).Set(float64(m.SizeBytes))
-	ProcessSmapsRss.WithLabelValues(labels...).Set(float64(m.RssBytes))
-	ProcessSmapsPss.WithLabelValues(labels...).Set(float64(m.PssBytes))
-	ProcessSmapsPssDirty.WithLabelValues(labels...).Set(float64(m.PssDirtyBytes))
-	ProcessSmapsSharedClean.WithLabelValues(labels...).Set(float64(m.SharedCleanBytes))
-	ProcessSmapsSharedDirty.WithLabelValues(labels...).Set(float64(m.SharedDirtyBytes))
-	ProcessSmapsPrivateClean.WithLabelValues(labels...).Set(float64(m.PrivateCleanBytes))
-	ProcessSmapsPrivateDirty.WithLabelValues(labels...).Set(float64(m.PrivateDirtyBytes))
-	ProcessSmapsReferenced.WithLabelValues(labels...).Set(float64(m.ReferencedBytes))
-	ProcessSmapsAnonymous.WithLabelValues(labels...).Set(float64(m.AnonymousBytes))
-	ProcessSmapsLazyFree.WithLabelValues(labels...).Set(float64(m.LazyFreeBytes))
-	ProcessSmapsAnonHugePages.WithLabelValues(labels...).Set(float64(m.AnonHugePagesBytes))
-	ProcessSmapsShmemPmdMapped.WithLabelValues(labels...).Set(float64(m.ShmemPmdMappedBytes))
-	ProcessSmapsSharedHugetlb.WithLabelValues(labels...).Set(float64(m.SharedHugetlbBytes))
-	ProcessSmapsPrivateHugetlb.WithLabelValues(labels...).Set(float64(m.PrivateHugetlbBytes))
-	ProcessSmapsSwap.WithLabelValues(labels...).Set(float64(m.SwapBytes))
-	ProcessSmapsSwapPss.WithLabelValues(labels...).Set(float64(m.SwapPssBytes))
-	ProcessSmapsKernelPageSize.WithLabelValues(labels...).Set(float64(m.KernelPageSizeBytes))
-	ProcessSmapsMMUPageSize.WithLabelValues(labels...).Set(float64(m.MMUPageSizeBytes))
-	ProcessSmapsLocked.WithLabelValues(labels...).Set(float64(m.LockedBytes))
+	gauge(ch, ProcessSmapsSize, float64(m.SizeBytes), labels...)
+	gauge(ch, ProcessSmapsRss, float64(m.RssBytes), labels...)
+	gauge(ch, ProcessSmapsPss, float64(m.PssBytes), labels...)
+	gauge(ch, ProcessSmapsPssDirty, float64(m.PssDirtyBytes), labels...)
+	gauge(ch, ProcessSmapsSharedClean, float64(m.SharedCleanBytes), labels...)
+	gauge(ch, ProcessSmapsSharedDirty, float64(m.SharedDirtyBytes), labels...)
+	gauge(ch, ProcessSmapsPrivateClean, float64(m.PrivateCleanBytes), labels...)
+	gauge(ch, ProcessSmapsPrivateDirty, float64(m.PrivateDirtyBytes), labels...)
+	gauge(ch, ProcessSmapsReferenced, float64(m.ReferencedBytes), labels...)
+	gauge(ch, ProcessSmapsAnonymous, float64(m.AnonymousBytes), labels...)
+	gauge(ch, ProcessSmapsLazyFree, float64(m.LazyFreeBytes), labels...)
+	gauge(ch, ProcessSmapsAnonHugePages, float64(m.AnonHugePagesBytes), labels...)
+	gauge(ch, ProcessSmapsShmemPmdMapped, float64(m.ShmemPmdMappedBytes), labels...)
+	gauge(ch, ProcessSmapsSharedHugetlb, float64(m.SharedHugetlbBytes), labels...)
+	gauge(ch, ProcessSmapsPrivateHugetlb, float64(m.PrivateHugetlbBytes), labels...)
+	gauge(ch, ProcessSmapsSwap, float64(m.SwapBytes), labels...)
+	gauge(ch, ProcessSmapsSwapPss, float64(m.SwapPssBytes), labels...)
+	gauge(ch, ProcessSmapsKernelPageSize, float64(m.KernelPageSizeBytes), labels...)
+	gauge(ch, ProcessSmapsMMUPageSize, float64(m.MMUPageSizeBytes), labels...)
+	gauge(ch, ProcessSmapsLocked, float64(m.LockedBytes), labels...)
 }
 
-func (c *Collector) collectProcIoMetrics(container Container) {
+func (c *Collector) collectProcIoMetrics(ch chan<- prometheus.Metric, container Container) {
 	if len(container.PIDs) == 0 {
 		slog.Debug("No PIDs to collect proc io for", "container", container.Container)
 		return
@@ -235,18 +234,18 @@ func (c *Collector) collectProcIoMetrics(container Container) {
 
 		labels := []string{container.Namespace, container.Pod, container.Container, strconv.Itoa(proc.PID), strconv.Itoa(proc.NSPID), proc.Comm}
 
-		ProcessIoRchar.WithLabelValues(labels...).Set(float64(procIO.Rchar))
-		ProcessIoWchar.WithLabelValues(labels...).Set(float64(procIO.Wchar))
-		ProcessIoSyscr.WithLabelValues(labels...).Set(float64(procIO.Syscr))
-		ProcessIoSyscw.WithLabelValues(labels...).Set(float64(procIO.Syscw))
-		ProcessIoReadBytes.WithLabelValues(labels...).Set(float64(procIO.ReadBytes))
-		ProcessIoWriteBytes.WithLabelValues(labels...).Set(float64(procIO.WriteBytes))
+		gauge(ch, ProcessIoRchar, float64(procIO.Rchar), labels...)
+		gauge(ch, ProcessIoWchar, float64(procIO.Wchar), labels...)
+		gauge(ch, ProcessIoSyscr, float64(procIO.Syscr), labels...)
+		gauge(ch, ProcessIoSyscw, float64(procIO.Syscw), labels...)
+		gauge(ch, ProcessIoReadBytes, float64(procIO.ReadBytes), labels...)
+		gauge(ch, ProcessIoWriteBytes, float64(procIO.WriteBytes), labels...)
 
 		slog.Debug("Collected proc io metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container, "pid", proc.PID)
 	}
 }
 
-func (c *Collector) collectDiskMetrics(container Container) {
+func (c *Collector) collectDiskMetrics(ch chan<- prometheus.Metric, container Container) {
 	if len(container.MountpointPaths) == 0 || len(container.PIDs) == 0 {
 		return
 	}
@@ -294,15 +293,15 @@ func (c *Collector) collectDiskMetrics(container Container) {
 		used := capacity - available
 
 		labels := []string{container.Namespace, container.Pod, container.Container, mount.MountPoint, mount.FsType, mount.Source}
-		MountpointCapacityBytes.WithLabelValues(labels...).Set(capacity)
-		MountpointAvailableBytes.WithLabelValues(labels...).Set(available)
-		MountpointUsedBytes.WithLabelValues(labels...).Set(used)
+		gauge(ch, MountpointCapacityBytes, capacity, labels...)
+		gauge(ch, MountpointAvailableBytes, available, labels...)
+		gauge(ch, MountpointUsedBytes, used, labels...)
 	}
 
 	slog.Debug("Collected disk metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)
 }
 
-func (c *Collector) collectFileMetrics(container Container) {
+func (c *Collector) collectFileMetrics(ch chan<- prometheus.Metric, container Container) {
 	if len(container.FileMetricPaths) == 0 || len(container.PIDs) == 0 {
 		return
 	}
@@ -339,8 +338,8 @@ func (c *Collector) collectFileMetrics(container Container) {
 		}
 
 		labels := []string{container.Namespace, container.Pod, container.Container, pattern}
-		FileSizeBytes.WithLabelValues(labels...).Set(float64(totalSize))
-		FileDiskUsageBytes.WithLabelValues(labels...).Set(float64(totalDiskUsage))
+		gauge(ch, FileSizeBytes, float64(totalSize), labels...)
+		gauge(ch, FileDiskUsageBytes, float64(totalDiskUsage), labels...)
 	}
 
 	slog.Debug("Collected file metrics", "namespace", container.Namespace, "pod", container.Pod, "container", container.Container)

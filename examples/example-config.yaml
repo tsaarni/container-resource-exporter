@@ -14,9 +14,6 @@ paths:
   # Path to container runtime CRI socket. If commented out, the exporter will search common paths.
   # cri_socket: "/run/containerd/containerd.sock"
 
-# How often to collect metrics
-scrape_interval: "1s"
-
 # Logging level: debug, info, warn, error, none
 log_level: "info"
 
